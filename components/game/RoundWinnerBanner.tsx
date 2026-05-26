@@ -31,6 +31,7 @@ export function RoundWinnerBanner({
           alt={winner.displayName}
           width={128}
           height={128}
+          loading="lazy"
           className="rounded-full w-32 h-32 mx-auto mb-4 ring-4 ring-brand-purple"
         />
 

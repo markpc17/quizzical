@@ -24,8 +24,10 @@ export default function ResultsPage() {
   const winner = sorted[0]
 
   useEffect(() => {
+    let cancelled = false
     const end = Date.now() + 3000
     const frame = () => {
+      if (cancelled || Date.now() > end) return
       confetti({
         particleCount: 6,
         angle: 60,
@@ -40,9 +42,10 @@ export default function ResultsPage() {
         origin: { x: 1 },
         colors: ['#6C3CF1', '#FFD600', '#ffffff'],
       })
-      if (Date.now() < end) requestAnimationFrame(frame)
+      requestAnimationFrame(frame)
     }
-    frame()
+    requestAnimationFrame(frame)
+    return () => { cancelled = true }
   }, [])
 
   return (
@@ -60,6 +63,7 @@ export default function ResultsPage() {
           alt={winner.displayName}
           width={128}
           height={128}
+          loading="lazy"
           className="rounded-full w-32 h-32 mx-auto mb-3 ring-4 ring-brand-yellow"
         />
         <p className="font-fredoka text-3xl text-white">{winner.displayName}</p>

@@ -29,6 +29,7 @@ export default function LobbyPage() {
   const [selectedAvatar, setSelectedAvatar] = useState<number | null>(null)
   const [joining, setJoining] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [isOrganiser, setIsOrganiser] = useState(false)
@@ -70,15 +71,23 @@ export default function LobbyPage() {
 
   async function handleStart() {
     setStarting(true)
+    setError(null)
     try {
       const organiserToken = localStorage.getItem(`quizzicle-organiser-${code}`)
-      await fetch(`/api/games/${code}/start`, {
+      const res = await fetch(`/api/games/${code}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ organiserToken }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Failed to start game')
+        setStarting(false)
+        return
+      }
       router.push(`/game/${code}/play`)
     } catch {
+      setError('Failed to start game')
       setStarting(false)
     }
   }
@@ -157,6 +166,7 @@ export default function LobbyPage() {
           >
             {starting ? 'Starting…' : 'Start Game'}
           </button>
+          {error && <p className="mt-2 text-red-400 text-sm">{error}</p>}
           <p className="mt-2 text-white/40 text-xs">Only visible to organiser</p>
         </div>
       )}

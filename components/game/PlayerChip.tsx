@@ -16,6 +16,7 @@ export function PlayerChip({ avatarId, displayName, className }: PlayerChipProps
         alt={displayName}
         width={32}
         height={32}
+        loading="lazy"
         className="rounded-full w-8 h-8 shrink-0"
       />
       <span className="text-white text-sm font-medium truncate">{displayName}</span>

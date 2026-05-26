@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { LoadScreen } from '@/components/game/LoadScreen'
 
@@ -22,13 +22,13 @@ export default function Home() {
     }
   }, [])
 
-  function handleLoadComplete() {
+  const handleLoadComplete = useCallback(() => {
     sessionStorage.setItem(LOADED_KEY, '1')
     setTimeout(() => {
       setShowLoad(false)
       setReady(true)
     }, 500)
-  }
+  }, [])
 
   async function handleCreateGame() {
     setCreating(true)

@@ -33,8 +33,14 @@ export default function PlayPage() {
       setSelectedAnswer(answer)
 
       const stored = localStorage.getItem(`quizzicle-player-${code}`)
-      if (!stored) return
-      const { playerId, playerToken } = JSON.parse(stored)
+      let playerData: { playerId: string; playerToken: string } | null = null
+      try {
+        playerData = stored ? JSON.parse(stored) : null
+      } catch {
+        // Malformed localStorage — player will need to rejoin
+      }
+      if (!playerData) return
+      const { playerId, playerToken } = playerData
 
       try {
         const res = await fetch(`/api/games/${code}/answer`, {

@@ -13,6 +13,7 @@ export function AvatarPicker({ selected, onSelect }: AvatarPickerProps) {
           key={id}
           type="button"
           onClick={() => onSelect(id)}
+          aria-pressed={selected === id}
           className={`flex flex-col items-center gap-1 rounded-xl p-1 transition-all focus:outline-none ${
             selected === id
               ? 'ring-4 ring-brand-purple bg-brand-purple/10'
@@ -24,6 +25,7 @@ export function AvatarPicker({ selected, onSelect }: AvatarPickerProps) {
             alt={`Avatar ${id}`}
             width={64}
             height={64}
+            loading="lazy"
             className="rounded-full w-16 h-16"
           />
         </button>
