@@ -4,19 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { AvatarPicker } from '@/components/game/AvatarPicker'
 import { PlayerChip } from '@/components/game/PlayerChip'
-
-// MOCK DATA — replaced in Phase 5
-const MOCK_PLAYERS = [
-  { playerId: 'p1', displayName: 'Alice', avatarId: 3 },
-  { playerId: 'p2', displayName: 'Bob', avatarId: 7 },
-  { playerId: 'p3', displayName: 'Charlie', avatarId: 12 },
-]
-
-interface Player {
-  playerId: string
-  displayName: string
-  avatarId: number
-}
+import { useGameState } from '@/hooks/useGameState'
 
 export default function LobbyPage() {
   const params = useParams()
@@ -24,7 +12,8 @@ export default function LobbyPage() {
   const router = useRouter()
   const code = params.code as string
 
-  const [players] = useState<Player[]>(MOCK_PLAYERS)
+  const { game, players, isOrganiser, loading } = useGameState(code)
+
   const [displayName, setDisplayName] = useState('')
   const [selectedAvatar, setSelectedAvatar] = useState<number | null>(null)
   const [joining, setJoining] = useState(false)
@@ -32,15 +21,22 @@ export default function LobbyPage() {
   const [error, setError] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [isOrganiser, setIsOrganiser] = useState(false)
 
+  // Validate organiser query param against stored token
   useEffect(() => {
     const organiserParam = searchParams.get('organiser')
     const storedToken = localStorage.getItem(`quizzicle-organiser-${code}`)
     if (organiserParam && organiserParam === storedToken) {
-      setIsOrganiser(true)
+      // isOrganiser is driven by useGameState via localStorage, but also check param
     }
   }, [code, searchParams])
+
+  // Auto-navigate when game starts
+  useEffect(() => {
+    if (game?.status === 'round_active') {
+      router.push(`/game/${code}/play`)
+    }
+  }, [game?.status, code, router])
 
   async function handleJoin() {
     if (!displayName.trim()) { setJoinError('Enter a display name'); return }
@@ -85,7 +81,7 @@ export default function LobbyPage() {
         setStarting(false)
         return
       }
-      router.push(`/game/${code}/play`)
+      // Realtime update will drive navigation via the useEffect above
     } catch {
       setError('Failed to start game')
       setStarting(false)
@@ -98,6 +94,14 @@ export default function LobbyPage() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-brand-dark flex items-center justify-center">
+        <p className="text-white/50 font-fredoka text-2xl">Loading…</p>
+      </main>
+    )
   }
 
   return (
@@ -122,8 +126,8 @@ export default function LobbyPage() {
         </p>
         <div className="flex flex-wrap gap-3">
           {players.map((p) => (
-            <div key={p.playerId} className="bg-brand-card rounded-xl px-3 py-2">
-              <PlayerChip avatarId={p.avatarId} displayName={p.displayName} />
+            <div key={p.id} className="bg-brand-card rounded-xl px-3 py-2">
+              <PlayerChip avatarId={p.avatar_id} displayName={p.display_name} />
             </div>
           ))}
         </div>

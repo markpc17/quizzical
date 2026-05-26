@@ -1,29 +1,36 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import confetti from 'canvas-confetti'
 import { Leaderboard, LeaderboardEntry } from '@/components/game/Leaderboard'
-
-// MOCK DATA — replaced in Phase 5
-const MOCK_PLAYERS: LeaderboardEntry[] = [
-  { playerId: 'p1', displayName: 'Alice', avatarId: 3, totalScore: 9600, totalTimeMs: 85300 },
-  { playerId: 'p2', displayName: 'Bob', avatarId: 7, totalScore: 8400, totalTimeMs: 78900 },
-  { playerId: 'p3', displayName: 'Charlie', avatarId: 12, totalScore: 7200, totalTimeMs: 95100 },
-  { playerId: 'p4', displayName: 'Diana', avatarId: 5, totalScore: 6100, totalTimeMs: 112200 },
-]
-const MOCK_HIGHLIGHT_PLAYER = 'p1'
+import { useGameState } from '@/hooks/useGameState'
 
 export default function ResultsPage() {
+  const params = useParams()
   const router = useRouter()
+  const code = params.code as string
 
-  const sorted = [...MOCK_PLAYERS].sort((a, b) => {
-    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore
-    return a.totalTimeMs - b.totalTimeMs
-  })
-  const winner = sorted[0]
+  const { players, myPlayerId, loading } = useGameState(code)
+
+  // Build and sort leaderboard
+  const leaderboardEntries: LeaderboardEntry[] = players
+    .map((p) => ({
+      playerId: p.id,
+      displayName: p.display_name,
+      avatarId: p.avatar_id,
+      totalScore: p.total_score,
+      totalTimeMs: p.total_time_ms,
+    }))
+    .sort((a, b) => {
+      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore
+      return a.totalTimeMs - b.totalTimeMs
+    })
+
+  const winner = leaderboardEntries[0]
 
   useEffect(() => {
+    if (!winner) return
     let cancelled = false
     const end = Date.now() + 3000
     const frame = () => {
@@ -46,7 +53,15 @@ export default function ResultsPage() {
     }
     requestAnimationFrame(frame)
     return () => { cancelled = true }
-  }, [])
+  }, [winner?.playerId])
+
+  if (loading || !winner) {
+    return (
+      <main className="min-h-screen bg-brand-dark flex items-center justify-center">
+        <p className="text-white/50 font-fredoka text-2xl">Loading results…</p>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen bg-brand-dark flex flex-col items-center px-4 py-12 gap-8">
@@ -72,7 +87,7 @@ export default function ResultsPage() {
         </p>
       </div>
 
-      <Leaderboard entries={MOCK_PLAYERS} highlightPlayerId={MOCK_HIGHLIGHT_PLAYER} />
+      <Leaderboard entries={leaderboardEntries} highlightPlayerId={myPlayerId ?? undefined} />
 
       <button
         type="button"

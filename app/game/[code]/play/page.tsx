@@ -1,30 +1,50 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { CountdownTimer } from '@/components/game/CountdownTimer'
 import { QuestionCard } from '@/components/game/QuestionCard'
-
-// MOCK DATA — replaced in Phase 5
-const MOCK_QUESTION = {
-  questionText: 'What is the capital of France?',
-  answers: ['Berlin', 'Paris', 'Madrid', 'Rome'],
-  correctAnswer: 'Paris',
-  roundNumber: 1,
-  questionNumber: 3,
-  category: 'Geography',
-}
-const MOCK_SCORE = 1200
-const QUESTION_DURATION = 20
+import { useGameState } from '@/hooks/useGameState'
+import { useCountdown } from '@/hooks/useCountdown'
+import { QUESTION_TIME_MS } from '@/lib/game-utils'
 
 export default function PlayPage() {
   const params = useParams()
+  const router = useRouter()
   const code = params.code as string
 
-  const [remaining, setRemaining] = useState(QUESTION_DURATION)
+  const {
+    game,
+    currentQuestion,
+    shuffledAnswers,
+    myPlayerId,
+    myPlayerToken,
+    currentRound,
+    players,
+    isOrganiser,
+  } = useGameState(code)
+
+  const remaining = useCountdown(currentQuestion?.opened_at ?? null, QUESTION_TIME_MS)
+
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [locked, setLocked] = useState(false)
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
+
+  // Reset answer state when question changes
+  useEffect(() => {
+    setSelectedAnswer(null)
+    setLocked(false)
+    setFeedback(null)
+  }, [currentQuestion?.id])
+
+  // Auto-navigate on game status changes
+  useEffect(() => {
+    if (game?.status === 'round_end') {
+      router.push(`/game/${code}/round-end`)
+    } else if (game?.status === 'finished') {
+      router.push(`/game/${code}/results`)
+    }
+  }, [game?.status, code, router])
 
   const lockAndSubmit = useCallback(
     async (answer: string | null) => {
@@ -32,47 +52,43 @@ export default function PlayPage() {
       setLocked(true)
       setSelectedAnswer(answer)
 
-      const stored = localStorage.getItem(`quizzicle-player-${code}`)
-      let playerData: { playerId: string; playerToken: string } | null = null
-      try {
-        playerData = stored ? JSON.parse(stored) : null
-      } catch {
-        // Malformed localStorage — player will need to rejoin
-      }
-      if (!playerData) return
-      const { playerId, playerToken } = playerData
+      if (!myPlayerId || !myPlayerToken || !currentQuestion) return
 
       try {
         const res = await fetch(`/api/games/${code}/answer`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ playerId, playerToken, answer }),
+          body: JSON.stringify({ playerId: myPlayerId, playerToken: myPlayerToken, answer }),
         })
         if (res.ok) {
           const { isCorrect } = await res.json()
           setFeedback(isCorrect ? 'correct' : 'wrong')
         }
       } catch {
-        // Phase 5 will handle errors via Realtime
+        // Realtime drives next transition
       }
     },
-    [locked, code]
+    [locked, code, myPlayerId, myPlayerToken, currentQuestion]
   )
 
-  // Countdown
+  // Auto-submit on timer expiry
   useEffect(() => {
-    if (locked) return
-    if (remaining <= 0) {
+    if (!locked && remaining <= 0) {
       lockAndSubmit(null)
-      return
     }
-    const tick = setTimeout(() => setRemaining((r) => r - 0.5), 500)
-    return () => clearTimeout(tick)
   }, [remaining, locked, lockAndSubmit])
 
   function handleAnswer(answer: string) {
     lockAndSubmit(answer)
   }
+
+  // Derive display values from live data
+  const myPlayer = players.find((p) => p.id === myPlayerId)
+  const myScore = myPlayer?.total_score ?? 0
+  const roundNumber = currentRound?.round_number ?? game?.current_round ?? 1
+  const questionNumber = currentQuestion?.question_number ?? game?.current_question ?? 1
+  const category = currentRound?.category_name ?? ''
+  const questionDurationSec = QUESTION_TIME_MS / 1000
 
   return (
     <main className="min-h-screen bg-brand-dark flex flex-col">
@@ -80,29 +96,33 @@ export default function PlayPage() {
       <div className="flex items-center justify-between px-4 py-3 bg-brand-card border-b border-white/10">
         <div>
           <p className="text-white/50 text-xs uppercase tracking-widest">
-            Round {MOCK_QUESTION.roundNumber} · Q{MOCK_QUESTION.questionNumber}
+            Round {roundNumber} · Q{questionNumber}
           </p>
-          <p className="text-white font-medium text-sm">{MOCK_QUESTION.category}</p>
+          <p className="text-white font-medium text-sm">{category}</p>
         </div>
 
-        <CountdownTimer total={QUESTION_DURATION} remaining={remaining} />
+        <CountdownTimer total={questionDurationSec} remaining={remaining} />
 
         <div className="text-right">
           <p className="text-white/50 text-xs uppercase tracking-widest">Score</p>
-          <p className="font-fredoka text-brand-yellow text-xl">{MOCK_SCORE.toLocaleString()}</p>
+          <p className="font-fredoka text-brand-yellow text-xl">{myScore.toLocaleString()}</p>
         </div>
       </div>
 
       {/* Question area */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 gap-6">
-        <QuestionCard
-          question={MOCK_QUESTION.questionText}
-          answers={MOCK_QUESTION.answers}
-          correctAnswer={MOCK_QUESTION.correctAnswer}
-          onAnswer={handleAnswer}
-          locked={locked}
-          selectedAnswer={selectedAnswer}
-        />
+        {currentQuestion ? (
+          <QuestionCard
+            question={currentQuestion.question_text}
+            answers={shuffledAnswers}
+            correctAnswer={currentQuestion.correct_answer}
+            onAnswer={handleAnswer}
+            locked={locked}
+            selectedAnswer={selectedAnswer}
+          />
+        ) : (
+          <p className="text-white/40 font-fredoka text-xl">Waiting for question…</p>
+        )}
 
         {/* Feedback banner */}
         {feedback && (
@@ -121,8 +141,8 @@ export default function PlayPage() {
           <p className="text-white/40 text-sm">Time&apos;s up — waiting for results…</p>
         )}
 
-        {locked && (
-          <p className="text-white/30 text-xs">Waiting for next question… (Phase 5 auto-advances)</p>
+        {locked && feedback && (
+          <p className="text-white/30 text-xs">Waiting for next question…</p>
         )}
       </div>
     </main>

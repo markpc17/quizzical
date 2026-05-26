@@ -4,36 +4,51 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { RoundWinnerBanner } from '@/components/game/RoundWinnerBanner'
 import { Leaderboard, LeaderboardEntry } from '@/components/game/Leaderboard'
-
-// MOCK DATA — replaced in Phase 5
-const MOCK_ROUND_NUMBER = 2
-
-const MOCK_PLAYERS: LeaderboardEntry[] = [
-  { playerId: 'p1', displayName: 'Alice', avatarId: 3, totalScore: 4800, totalTimeMs: 42300 },
-  { playerId: 'p2', displayName: 'Bob', avatarId: 7, totalScore: 4200, totalTimeMs: 38900 },
-  { playerId: 'p3', displayName: 'Charlie', avatarId: 12, totalScore: 3600, totalTimeMs: 55100 },
-  { playerId: 'p4', displayName: 'Diana', avatarId: 5, totalScore: 3100, totalTimeMs: 61200 },
-]
+import { useGameState } from '@/hooks/useGameState'
 
 export default function RoundEndPage() {
   const params = useParams()
   const router = useRouter()
   const code = params.code as string
 
+  const { game, players, currentRound, roundWinner, isOrganiser, loading } = useGameState(code)
+
   const [showBanner, setShowBanner] = useState(true)
-  const [isOrganiser, setIsOrganiser] = useState(false)
   const [advancing, setAdvancing] = useState(false)
 
+  // Auto-navigate when next round starts
   useEffect(() => {
-    const stored = localStorage.getItem(`quizzicle-organiser-${code}`)
-    setIsOrganiser(!!stored)
-  }, [code])
+    if (game?.status === 'round_active') {
+      router.push(`/game/${code}/play`)
+    } else if (game?.status === 'finished') {
+      router.push(`/game/${code}/results`)
+    }
+  }, [game?.status, code, router])
 
-  const sorted = [...MOCK_PLAYERS].sort((a, b) => {
-    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore
-    return a.totalTimeMs - b.totalTimeMs
-  })
-  const winner = sorted[0]
+  // Build leaderboard entries from players
+  const leaderboardEntries: LeaderboardEntry[] = players
+    .map((p) => ({
+      playerId: p.id,
+      displayName: p.display_name,
+      avatarId: p.avatar_id,
+      totalScore: p.total_score,
+      totalTimeMs: p.total_time_ms,
+    }))
+    .sort((a, b) => {
+      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore
+      return a.totalTimeMs - b.totalTimeMs
+    })
+
+  // Map roundWinner Player → LeaderboardEntry for the banner
+  const winnerEntry: LeaderboardEntry | null = roundWinner
+    ? {
+        playerId: roundWinner.id,
+        displayName: roundWinner.display_name,
+        avatarId: roundWinner.avatar_id,
+        totalScore: roundWinner.total_score,
+        totalTimeMs: roundWinner.total_time_ms,
+      }
+    : leaderboardEntries[0] ?? null
 
   async function handleContinue() {
     setAdvancing(true)
@@ -44,33 +59,37 @@ export default function RoundEndPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ organiserToken }),
       })
-      if (res.ok) {
-        const { state } = await res.json()
-        if (state === 'game_over') {
-          router.push(`/game/${code}/results`)
-        } else {
-          router.push(`/game/${code}/play`)
-        }
+      if (!res.ok) {
+        setAdvancing(false)
       }
+      // Realtime update drives navigation via the useEffect above
     } catch {
       setAdvancing(false)
     }
   }
 
+  if (loading || leaderboardEntries.length === 0) {
+    return (
+      <main className="min-h-screen bg-brand-dark flex items-center justify-center">
+        <p className="text-white/50 font-fredoka text-2xl">Loading…</p>
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-screen bg-brand-dark flex flex-col items-center px-4 py-8 gap-8">
-      {showBanner && (
+      {showBanner && winnerEntry && (
         <RoundWinnerBanner
-          roundNumber={MOCK_ROUND_NUMBER}
-          winner={winner}
-          allPlayers={MOCK_PLAYERS}
+          roundNumber={currentRound?.round_number ?? game?.current_round ?? 1}
+          winner={winnerEntry}
+          allPlayers={leaderboardEntries}
           onContinue={handleContinue}
           isOrganiser={isOrganiser}
         />
       )}
 
       <h2 className="font-fredoka text-3xl text-white mt-4">Leaderboard</h2>
-      <Leaderboard entries={MOCK_PLAYERS} />
+      <Leaderboard entries={leaderboardEntries} />
 
       <button
         type="button"
