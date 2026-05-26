@@ -1,6 +1,6 @@
 'use client'
 
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { PlayerChip } from './PlayerChip'
 
@@ -36,6 +36,7 @@ export function Leaderboard({ entries, highlightPlayerId }: LeaderboardProps) {
         <span className="text-right">Time</span>
       </div>
 
+      <LayoutGroup>
       <AnimatePresence>
         {sorted.map((entry, idx) => {
           const isFirst = idx === 0
@@ -73,6 +74,7 @@ export function Leaderboard({ entries, highlightPlayerId }: LeaderboardProps) {
           )
         })}
       </AnimatePresence>
+      </LayoutGroup>
     </div>
   )
 }
