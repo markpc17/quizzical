@@ -47,14 +47,56 @@ export interface Answer {
   time_taken_ms: number
 }
 
+// Insert types: fields with DB defaults are optional
+export interface GamesInsert {
+  code: string
+  status?: GameStatus
+  current_round?: number
+  current_question?: number
+}
+
+export interface PlayersInsert {
+  game_id: string
+  display_name: string
+  avatar_id: number
+  total_score?: number
+  total_time_ms?: number
+}
+
+export interface RoundsInsert {
+  game_id: string
+  round_number: number
+  category_id: number
+  category_name: string
+}
+
+export interface QuestionsInsert {
+  round_id: string
+  question_number: number
+  question_text: string
+  correct_answer: string
+  incorrect_answers: string[]
+  opened_at?: string | null
+}
+
+export interface AnswersInsert {
+  question_id: string
+  player_id: string
+  answer: string
+  is_correct?: boolean
+  time_taken_ms?: number
+}
+
 export interface Database {
   public: {
     Tables: {
-      games: { Row: Game; Insert: Omit<Game, 'id' | 'created_at'>; Update: Partial<Game> }
-      players: { Row: Player; Insert: Omit<Player, 'id' | 'joined_at'>; Update: Partial<Player> }
-      rounds: { Row: Round; Insert: Omit<Round, 'id'>; Update: Partial<Round> }
-      questions: { Row: Question; Insert: Omit<Question, 'id'> & { opened_at?: string | null }; Update: Partial<Question> }
-      answers: { Row: Answer; Insert: Omit<Answer, 'id' | 'answered_at' | 'is_correct'> & { is_correct?: boolean }; Update: Partial<Answer> }
+      games: { Row: Game; Insert: GamesInsert; Update: Partial<Game>; Relationships: [] }
+      players: { Row: Player; Insert: PlayersInsert; Update: Partial<Player>; Relationships: [] }
+      rounds: { Row: Round; Insert: RoundsInsert; Update: Partial<Round>; Relationships: [] }
+      questions: { Row: Question; Insert: QuestionsInsert; Update: Partial<Question>; Relationships: [] }
+      answers: { Row: Answer; Insert: AnswersInsert; Update: Partial<Answer>; Relationships: [] }
     }
+    Views: Record<string, never>
+    Functions: Record<string, never>
   }
 }
