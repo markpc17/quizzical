@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import { CountdownTimer } from '@/components/game/CountdownTimer'
 import { QuestionCard } from '@/components/game/QuestionCard'
 import { useGameState } from '@/hooks/useGameState'
@@ -93,7 +94,7 @@ export default function PlayPage() {
   return (
     <main className="min-h-screen bg-brand-dark flex flex-col">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-3 bg-brand-card border-b border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-brand-card border-b border-white/10">
         <div>
           <p className="text-white/50 text-xs uppercase tracking-widest">
             Round {roundNumber} · Q{questionNumber}
@@ -111,18 +112,37 @@ export default function PlayPage() {
 
       {/* Question area */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 gap-6">
-        {currentQuestion ? (
-          <QuestionCard
-            question={currentQuestion.question_text}
-            answers={shuffledAnswers}
-            correctAnswer={currentQuestion.correct_answer}
-            onAnswer={handleAnswer}
-            locked={locked}
-            selectedAnswer={selectedAnswer}
-          />
-        ) : (
-          <p className="text-white/40 font-fredoka text-xl">Waiting for question…</p>
-        )}
+        <AnimatePresence mode="wait">
+          {currentQuestion ? (
+            <motion.div
+              key={currentQuestion.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.25 }}
+              className="w-full"
+            >
+              <QuestionCard
+                question={currentQuestion.question_text}
+                answers={shuffledAnswers}
+                correctAnswer={currentQuestion.correct_answer}
+                onAnswer={handleAnswer}
+                locked={locked}
+                selectedAnswer={selectedAnswer}
+              />
+            </motion.div>
+          ) : (
+            <motion.p
+              key="waiting"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-white/40 font-fredoka text-xl"
+            >
+              Waiting for question…
+            </motion.p>
+          )}
+        </AnimatePresence>
 
         {/* Feedback banner */}
         {feedback && (

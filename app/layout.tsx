@@ -19,7 +19,13 @@ const fredoka = Fredoka({
 
 export const metadata: Metadata = {
   title: "Quizzicle",
-  description: "Real-time multiplayer quiz game",
+  description: "The ultimate real-time quiz showdown",
+  icons: { icon: "/favicon.svg" },
+  openGraph: {
+    title: "Quizzicle",
+    description: "The ultimate real-time quiz showdown",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

@@ -51,7 +51,7 @@ export default function Home() {
 
       {ready && (
         <main className="min-h-screen flex flex-col items-center justify-center gap-6 px-4 bg-brand-dark">
-          <h1 className="font-fredoka text-6xl text-brand-yellow">
+          <h1 className="font-fredoka text-5xl md:text-7xl text-brand-yellow">
             ⚡ Quizzicle
           </h1>
           <p className="text-white/70 text-xl text-center">
@@ -66,7 +66,7 @@ export default function Home() {
             type="button"
             disabled={creating}
             onClick={handleCreateGame}
-            className="mt-2 rounded-2xl bg-brand-purple px-10 py-4 font-fredoka text-2xl text-white hover:bg-brand-purple/80 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="mt-2 w-full md:w-auto rounded-2xl bg-brand-purple px-10 py-4 font-fredoka text-2xl text-white hover:bg-brand-purple/80 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {creating ? 'Creating…' : 'Create Game'}
           </button>

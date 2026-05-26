@@ -1,5 +1,8 @@
 'use client'
 
+import { useEffect } from 'react'
+import confetti from 'canvas-confetti'
+import { motion } from 'framer-motion'
 import { LeaderboardEntry } from './Leaderboard'
 import { Leaderboard } from './Leaderboard'
 
@@ -18,9 +21,27 @@ export function RoundWinnerBanner({
   onContinue,
   isOrganiser,
 }: RoundWinnerBannerProps) {
+  useEffect(() => {
+    confetti({
+      particleCount: 100,
+      spread: 120,
+      origin: { y: 0.4 },
+      colors: ['#6C3CF1', '#FFD600', '#ffffff'],
+    })
+  }, [])
+
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4">
-      <div className="bg-brand-card rounded-2xl p-8 w-full max-w-md text-center shadow-2xl border border-white/10">
+    <motion.div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+    >
+      <motion.div
+        className="bg-brand-card rounded-2xl p-8 w-full max-w-md text-center shadow-2xl border border-white/10"
+        initial={{ scale: 0.5, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      >
         <p className="font-fredoka text-brand-yellow text-2xl mb-1">
           Round {roundNumber} Complete!
         </p>
@@ -35,10 +56,16 @@ export function RoundWinnerBanner({
           className="rounded-full w-32 h-32 mx-auto mb-4 ring-4 ring-brand-purple"
         />
 
-        <p className="font-fredoka text-3xl text-white mb-1">{winner.displayName}</p>
-        <p className="text-brand-purple font-medium text-lg mb-6">
-          {winner.totalScore.toLocaleString()} pts
-        </p>
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3 }}
+        >
+          <p className="font-fredoka text-3xl text-white mb-1">{winner.displayName}</p>
+          <p className="text-brand-purple font-medium text-lg mb-6">
+            {winner.totalScore.toLocaleString()} pts
+          </p>
+        </motion.div>
 
         <div className="mb-6 text-left">
           <Leaderboard entries={allPlayers} highlightPlayerId={winner.playerId} />
@@ -56,7 +83,7 @@ export function RoundWinnerBanner({
         {!isOrganiser && (
           <p className="text-white/40 text-sm">Waiting for organiser to start next round…</p>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }
