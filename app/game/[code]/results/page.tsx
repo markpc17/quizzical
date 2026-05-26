@@ -58,9 +58,9 @@ export default function ResultsPage() {
         <img
           src={`https://api.dicebear.com/9.x/fun-emoji/svg?seed=${winner.avatarId}`}
           alt={winner.displayName}
-          width={96}
-          height={96}
-          className="rounded-full w-24 h-24 mx-auto mb-3 ring-4 ring-brand-yellow"
+          width={128}
+          height={128}
+          className="rounded-full w-32 h-32 mx-auto mb-3 ring-4 ring-brand-yellow"
         />
         <p className="font-fredoka text-3xl text-white">{winner.displayName}</p>
         <p className="font-fredoka text-2xl text-brand-yellow mt-1">
