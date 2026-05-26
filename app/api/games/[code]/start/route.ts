@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClientUntyped } from '@/lib/supabase/admin'
-import { decodeHtmlEntities, shuffleArray } from '@/lib/game-utils'
+import { decodeHtmlEntities, shuffleArray, GAME_ROUNDS, QUESTIONS_PER_ROUND } from '@/lib/game-utils'
 
 interface OpenTDBCategory {
   id: number
@@ -72,6 +72,13 @@ export async function POST(
     return NextResponse.json({ error: 'Game has already started' }, { status: 409 })
   }
 
+  // Clean up any partial previous attempt
+  const { data: existingRounds } = await supabase.from('rounds').select('id').eq('game_id', game.id)
+  if (existingRounds && existingRounds.length > 0) {
+    // Previous attempt failed mid-way — clean up (questions cascade-delete via FK)
+    await supabase.from('rounds').delete().eq('game_id', game.id)
+  }
+
   // Fetch OpenTDB categories and pick 5 distinct ones
   let allCategories: OpenTDBCategory[]
   try {
@@ -87,7 +94,7 @@ export async function POST(
   const selectedRounds: Array<{ category: OpenTDBCategory; questions: OpenTDBQuestion[] }> = []
   let categoryIndex = 0
 
-  while (selectedRounds.length < 5 && categoryIndex < allCategories.length) {
+  while (selectedRounds.length < GAME_ROUNDS && categoryIndex < allCategories.length) {
     const category = allCategories[categoryIndex]
     categoryIndex++
 
@@ -99,12 +106,12 @@ export async function POST(
       continue
     }
 
-    if (questions && questions.length >= 10) {
-      selectedRounds.push({ category, questions: questions.slice(0, 10) })
+    if (questions && questions.length >= QUESTIONS_PER_ROUND) {
+      selectedRounds.push({ category, questions: questions.slice(0, QUESTIONS_PER_ROUND) })
     }
   }
 
-  if (selectedRounds.length < 5) {
+  if (selectedRounds.length < GAME_ROUNDS) {
     return NextResponse.json({ error: 'Could not fetch enough quiz questions from OpenTDB' }, { status: 502 })
   }
 

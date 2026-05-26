@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createAdminClientUntyped } from '@/lib/supabase/admin'
+import { QUESTION_TIME_MS } from '@/lib/game-utils'
 
-const MAX_TIME_MS = 20000
+const MAX_TIME_MS = QUESTION_TIME_MS
 
 export async function POST(
   request: Request,
@@ -16,10 +17,11 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { playerId, questionId, answer } = body as {
+  const { playerId, questionId, answer, playerToken } = body as {
     playerId?: unknown
     questionId?: unknown
     answer?: unknown
+    playerToken?: unknown
   }
 
   if (typeof playerId !== 'string' || !playerId) {
@@ -86,7 +88,7 @@ export async function POST(
   // Verify the player belongs to this game
   const { data: playerData, error: playerError } = await supabase
     .from('players')
-    .select('id, game_id, total_score, total_time_ms')
+    .select('id, game_id, total_score, total_time_ms, player_token')
     .eq('id', playerId)
     .eq('game_id', game.id)
     .single()
@@ -99,6 +101,12 @@ export async function POST(
     game_id: string
     total_score: number
     total_time_ms: number
+    player_token: string | null
+  }
+
+  // Validate player token
+  if (!playerToken || player.player_token !== playerToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   if (!question.opened_at) {
@@ -128,7 +136,7 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to record answer' }, { status: 500 })
   }
 
-  // Update player score if correct
+  // Update player score if correct — optimistic lock prevents double-count on retry
   if (isCorrect) {
     const { error: scoreError } = await supabase
       .from('players')
@@ -137,10 +145,11 @@ export async function POST(
         total_time_ms: player.total_time_ms + timeTakenMs,
       })
       .eq('id', playerId)
+      .eq('total_score', player.total_score) // optimistic lock — prevents double-count if retried
 
     if (scoreError) {
-      console.error('[POST /api/games/[code]/answer] score update', scoreError)
-      // Non-fatal: answer was recorded; best-effort score update
+      // Log but don't fail — score update failure is non-critical for the answer record
+      console.error('Score update failed:', scoreError)
     }
   }
 

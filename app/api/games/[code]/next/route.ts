@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClientUntyped } from '@/lib/supabase/admin'
+import { GAME_ROUNDS, QUESTIONS_PER_ROUND } from '@/lib/game-utils'
 
 export async function POST(
   request: Request,
@@ -73,15 +74,21 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to open first question' }, { status: 500 })
     }
 
-    // Transition game back to round_active
-    const { error: updateError } = await supabase
+    // Transition game back to round_active — optimistic lock on status
+    const { data: updated, error: updateError } = await supabase
       .from('games')
-      .update({ status: 'round_active' })
+      .update({ status: 'round_active', current_question: 0 })
       .eq('id', game.id)
+      .eq('status', 'round_end')
+      .select('id')
 
     if (updateError) {
       console.error('[POST /api/games/[code]/next] round_end -> round_active', updateError)
       return NextResponse.json({ error: 'Failed to start round' }, { status: 500 })
+    }
+
+    if (!updated || updated.length === 0) {
+      return NextResponse.json({ error: 'State already advanced' }, { status: 409 })
     }
 
     return NextResponse.json({ ok: true, state: 'next_question' })
@@ -89,7 +96,7 @@ export async function POST(
 
   // game.status is 'round_active' — advance question or round
 
-  if (current_question < 9) {
+  if (current_question < QUESTIONS_PER_ROUND - 1) {
     // Move to the next question within the same round
     const nextQuestion = current_question + 1
 
@@ -118,27 +125,34 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to open next question' }, { status: 500 })
     }
 
-    // Advance the game pointer
-    const { error: updateError } = await supabase
+    // Advance the game pointer — optimistic lock on current_question and status
+    const { data: updated, error: updateError } = await supabase
       .from('games')
       .update({ current_question: nextQuestion })
       .eq('id', game.id)
+      .eq('current_question', game.current_question)
+      .eq('status', 'round_active')
+      .select('id')
 
     if (updateError) {
       console.error('[POST /api/games/[code]/next] increment question', updateError)
       return NextResponse.json({ error: 'Failed to advance question' }, { status: 500 })
     }
 
+    if (!updated || updated.length === 0) {
+      return NextResponse.json({ error: 'State already advanced' }, { status: 409 })
+    }
+
     return NextResponse.json({ ok: true, state: 'next_question' })
   }
 
-  // current_question === 9 — end of the round
+  // current_question === QUESTIONS_PER_ROUND - 1 — end of the round
 
-  if (current_round < 5) {
+  if (current_round < GAME_ROUNDS) {
     // Move to the next round (round_end state; organiser calls /next again to start it)
     const nextRound = current_round + 1
 
-    const { error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from('games')
       .update({
         status: 'round_end',
@@ -146,25 +160,39 @@ export async function POST(
         current_question: 0,
       })
       .eq('id', game.id)
+      .eq('current_question', game.current_question)
+      .eq('status', 'round_active')
+      .select('id')
 
     if (updateError) {
       console.error('[POST /api/games/[code]/next] advance round', updateError)
       return NextResponse.json({ error: 'Failed to advance to next round' }, { status: 500 })
     }
 
+    if (!updated || updated.length === 0) {
+      return NextResponse.json({ error: 'State already advanced' }, { status: 409 })
+    }
+
     return NextResponse.json({ ok: true, state: 'round_end' })
   }
 
-  // current_round === 5 AND current_question === 9 — game over
+  // current_round === GAME_ROUNDS AND current_question === QUESTIONS_PER_ROUND - 1 — game over
 
-  const { error: finishError } = await supabase
+  const { data: updated, error: finishError } = await supabase
     .from('games')
     .update({ status: 'finished' })
     .eq('id', game.id)
+    .eq('current_question', game.current_question)
+    .eq('status', 'round_active')
+    .select('id')
 
   if (finishError) {
     console.error('[POST /api/games/[code]/next] finish game', finishError)
     return NextResponse.json({ error: 'Failed to finish game' }, { status: 500 })
+  }
+
+  if (!updated || updated.length === 0) {
+    return NextResponse.json({ error: 'State already advanced' }, { status: 409 })
   }
 
   return NextResponse.json({ ok: true, state: 'game_over' })

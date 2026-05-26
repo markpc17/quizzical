@@ -1,3 +1,7 @@
+export const GAME_ROUNDS = 5
+export const QUESTIONS_PER_ROUND = 10
+export const QUESTION_TIME_MS = 20_000
+
 /**
  * Generates a random 6-character uppercase alphanumeric game code.
  */
