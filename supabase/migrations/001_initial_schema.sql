@@ -8,7 +8,7 @@
 
 CREATE TABLE games (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  code TEXT NOT NULL UNIQUE,            -- 6-char uppercase join code
+  code TEXT NOT NULL UNIQUE CHECK (char_length(code) = 6 AND code ~ '^[A-Z0-9]+$'),  -- 6-char uppercase join code
   status TEXT NOT NULL DEFAULT 'lobby'  -- lobby | round_active | round_end | finished
     CHECK (status IN ('lobby','round_active','round_end','finished')),
   current_round INT NOT NULL DEFAULT 0,    -- 0 = not started, 1–5 = active round
@@ -66,7 +66,6 @@ CREATE INDEX idx_rounds_game_id ON rounds(game_id);
 CREATE INDEX idx_questions_round_id ON questions(round_id);
 CREATE INDEX idx_answers_question_id ON answers(question_id);
 CREATE INDEX idx_answers_player_id ON answers(player_id);
-CREATE INDEX idx_games_code ON games(code);
 
 -- ------------------------------------------------------------
 -- Row Level Security

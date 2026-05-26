@@ -1,10 +1,11 @@
-import { createServerClient } from '@supabase/ssr'
+import 'server-only'
+import { createServerClient as createSupabaseServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from './types'
 
-export async function createClient() {
+export async function createServerClient() {
   const cookieStore = await cookies()
-  return createServerClient<Database>(
+  return createSupabaseServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -15,7 +16,9 @@ export async function createClient() {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
             )
-          } catch {}
+          } catch {
+            // In Server Components, cookies() is read-only — safe to ignore here.
+          }
         },
       },
     }

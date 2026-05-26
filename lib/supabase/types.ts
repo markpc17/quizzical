@@ -53,8 +53,8 @@ export interface Database {
       games: { Row: Game; Insert: Omit<Game, 'id' | 'created_at'>; Update: Partial<Game> }
       players: { Row: Player; Insert: Omit<Player, 'id' | 'joined_at'>; Update: Partial<Player> }
       rounds: { Row: Round; Insert: Omit<Round, 'id'>; Update: Partial<Round> }
-      questions: { Row: Question; Insert: Omit<Question, 'id'>; Update: Partial<Question> }
-      answers: { Row: Answer; Insert: Omit<Answer, 'id' | 'answered_at'>; Update: Partial<Answer> }
+      questions: { Row: Question; Insert: Omit<Question, 'id'> & { opened_at?: string | null }; Update: Partial<Question> }
+      answers: { Row: Answer; Insert: Omit<Answer, 'id' | 'answered_at' | 'is_correct'> & { is_correct?: boolean }; Update: Partial<Answer> }
     }
   }
 }
