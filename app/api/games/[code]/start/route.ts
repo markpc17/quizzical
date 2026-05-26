@@ -46,17 +46,15 @@ export async function POST(
 ) {
   const { code } = await params
 
-  // TODO: validate organiser token
-  // The organiser token is stored client-side in localStorage. Proper server-side
-  // validation would require persisting the token in the games table or using a
-  // signed JWT. Skipped for this phase.
+  const body = await request.json().catch(() => ({}))
+  const { organiserToken } = body as { organiserToken?: unknown }
 
   const supabase = createAdminClientUntyped()
 
   // Fetch game
   const { data: gameData, error: gameError } = await supabase
     .from('games')
-    .select('id, status')
+    .select('id, status, organiser_token')
     .eq('code', code.toUpperCase())
     .single()
 
@@ -64,7 +62,11 @@ export async function POST(
     return NextResponse.json({ error: 'Game not found' }, { status: 404 })
   }
 
-  const game = gameData as { id: string; status: string }
+  const game = gameData as { id: string; status: string; organiser_token: string | null }
+
+  if (!organiserToken || game.organiser_token !== organiserToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   if (game.status !== 'lobby') {
     return NextResponse.json({ error: 'Game has already started' }, { status: 409 })

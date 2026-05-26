@@ -7,6 +7,7 @@ export interface Game {
   current_round: number
   current_question: number
   created_at: string
+  organiser_token: string | null
 }
 
 export interface Player {
@@ -17,6 +18,7 @@ export interface Player {
   joined_at: string
   total_score: number
   total_time_ms: number
+  player_token: string | null
 }
 
 export interface Round {
@@ -53,6 +55,7 @@ export interface GamesInsert {
   status?: GameStatus
   current_round?: number
   current_question?: number
+  organiser_token?: string | null
 }
 
 export interface PlayersInsert {
@@ -61,6 +64,7 @@ export interface PlayersInsert {
   avatar_id: number
   total_score?: number
   total_time_ms?: number
+  player_token?: string | null
 }
 
 export interface RoundsInsert {

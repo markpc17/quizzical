@@ -7,14 +7,15 @@ export async function POST(
 ) {
   const { code } = await params
 
-  // TODO: validate organiser token (see start/route.ts for rationale)
+  const body = await request.json().catch(() => ({}))
+  const { organiserToken } = body as { organiserToken?: unknown }
 
   const supabase = createAdminClientUntyped()
 
   // Fetch current game state
   const { data: gameData, error: gameError } = await supabase
     .from('games')
-    .select('id, status, current_round, current_question')
+    .select('id, status, current_round, current_question, organiser_token')
     .eq('code', code.toUpperCase())
     .single()
 
@@ -27,6 +28,11 @@ export async function POST(
     status: string
     current_round: number
     current_question: number
+    organiser_token: string | null
+  }
+
+  if (!organiserToken || game.organiser_token !== organiserToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   if (game.status === 'finished') {

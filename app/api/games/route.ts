@@ -5,12 +5,14 @@ import { generateGameCode } from '@/lib/game-utils'
 export async function POST() {
   const supabase = createAdminClientUntyped()
 
-  async function tryInsert(): Promise<{ gameId: string; code: string } | null> {
+  async function tryInsert(): Promise<{ gameId: string; code: string; organiserToken: string } | null> {
     const code = generateGameCode()
+
+    const organiserToken = crypto.randomUUID()
 
     const { data, error } = await supabase
       .from('games')
-      .insert({ code, status: 'lobby' })
+      .insert({ code, status: 'lobby', organiser_token: organiserToken })
       .select('id, code')
       .single()
 
@@ -22,7 +24,7 @@ export async function POST() {
       throw error
     }
 
-    return { gameId: (data as { id: string; code: string }).id, code: (data as { id: string; code: string }).code }
+    return { gameId: (data as { id: string; code: string }).id, code: (data as { id: string; code: string }).code, organiserToken }
   }
 
   try {
@@ -36,12 +38,10 @@ export async function POST() {
       }
     }
 
-    const organiserToken = crypto.randomUUID()
-
     return NextResponse.json({
       gameId: result.gameId,
       code: result.code,
-      organiserToken,
+      organiserToken: result.organiserToken,
     })
   } catch (err) {
     console.error('[POST /api/games]', err)

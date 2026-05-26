@@ -5,10 +5,6 @@ export function generateGameCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   let code = ''
   while (code.length < 6) {
-    const char = String.fromCharCode(
-      Math.floor(Math.random() * 256)
-    )
-    // Only use chars that appear in our allowed set
     const idx = Math.floor(Math.random() * chars.length)
     code += chars[idx]
   }

@@ -67,5 +67,16 @@ export async function POST(
   const player = playerData as { id: string }
   const playerToken = crypto.randomUUID()
 
+  // Persist the player token
+  const { error: tokenError } = await supabase
+    .from('players')
+    .update({ player_token: playerToken })
+    .eq('id', player.id)
+
+  if (tokenError) {
+    console.error('[POST /api/games/[code]/join] token update', tokenError)
+    return NextResponse.json({ error: 'Failed to join game' }, { status: 500 })
+  }
+
   return NextResponse.json({ playerId: player.id, playerToken })
 }

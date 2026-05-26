@@ -46,6 +46,10 @@ export async function POST(
   }
   const game = gameData as { id: string; status: string }
 
+  if (game.status !== 'round_active') {
+    return NextResponse.json({ error: 'Game is not accepting answers' }, { status: 409 })
+  }
+
   // Fetch the question — verify it belongs to this game via rounds
   const { data: questionData, error: questionError } = await supabase
     .from('questions')
@@ -97,12 +101,13 @@ export async function POST(
     total_time_ms: number
   }
 
-  // Calculate time taken
-  let timeTakenMs = MAX_TIME_MS
-  if (question.opened_at) {
-    const elapsed = Date.now() - new Date(question.opened_at).getTime()
-    timeTakenMs = Math.min(Math.max(0, elapsed), MAX_TIME_MS)
+  if (!question.opened_at) {
+    return NextResponse.json({ error: 'Question not yet opened' }, { status: 409 })
   }
+
+  // Calculate time taken
+  const elapsed = Date.now() - new Date(question.opened_at).getTime()
+  const timeTakenMs = Math.min(Math.max(0, elapsed), MAX_TIME_MS)
 
   const isCorrect = answer === question.correct_answer
 
