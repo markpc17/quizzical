@@ -19,7 +19,10 @@ export default function LobbyPage() {
   const [selectedAvatar, setSelectedAvatar] = useState<number | null>(null)
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard' | 'mixed'>('medium')
   const [joining, setJoining] = useState(false)
-  const [joined, setJoined] = useState(false)
+  const [joined, setJoined] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return !!localStorage.getItem(`quizzicle-player-${code}`)
+  })
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
