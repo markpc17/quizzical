@@ -1,6 +1,8 @@
+import { decode } from 'html-entities'
+
 export const GAME_ROUNDS = 5
 export const QUESTIONS_PER_ROUND = 10
-export const QUESTION_TIME_MS = 20_000
+export const QUESTION_TIME_MS = 15_000
 
 /**
  * Generates a random 6-character uppercase alphanumeric game code.
@@ -15,27 +17,7 @@ export function generateGameCode(): string {
   return code
 }
 
-/**
- * Decodes common HTML entities from OpenTDB responses.
- */
-export function decodeHtmlEntities(text: string): string {
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&lsquo;/g, '‘')
-    .replace(/&rsquo;/g, '’')
-    .replace(/&ldquo;/g, '“')
-    .replace(/&rdquo;/g, '”')
-    .replace(/&ndash;/g, '–')
-    .replace(/&mdash;/g, '—')
-    .replace(/&hellip;/g, '…')
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-}
+export const decodeHtmlEntities = (text: string): string => decode(text)
 
 /**
  * Fisher-Yates in-place shuffle. Returns the same array (mutated).
