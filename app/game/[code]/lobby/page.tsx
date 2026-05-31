@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { AvatarPicker } from '@/components/game/AvatarPicker'
 import { PlayerChip } from '@/components/game/PlayerChip'
 import { useGameState } from '@/hooks/useGameState'
+import { GAME_ROUNDS } from '@/lib/game-utils'
 
 export default function LobbyPage() {
   const params = useParams()
@@ -23,6 +24,7 @@ export default function LobbyPage() {
   const [error, setError] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [fetchProgress, setFetchProgress] = useState(0)
 
   // Auto-navigate when game starts
   useEffect(() => {
@@ -30,6 +32,18 @@ export default function LobbyPage() {
       router.push(`/game/${code}/play`)
     }
   }, [game?.status, code, router])
+
+  // Animate progress counter during game start — mirrors server's 1500 ms per-round cadence
+  useEffect(() => {
+    if (!starting) {
+      setFetchProgress(0)
+      return
+    }
+    const interval = setInterval(() => {
+      setFetchProgress((prev) => Math.min(prev + 1, GAME_ROUNDS))
+    }, 1500)
+    return () => clearInterval(interval)
+  }, [starting])
 
   async function handleJoin() {
     if (!displayName.trim()) { setJoinError('Enter a display name'); return }
@@ -209,8 +223,22 @@ export default function LobbyPage() {
             onClick={handleStart}
             className="rounded-2xl bg-brand-yellow px-10 py-4 font-fredoka text-2xl text-brand-dark hover:bg-brand-yellow/80 transition-colors disabled:opacity-60"
           >
-            {starting ? 'Loading questions…' : 'Start Game'}
+            {starting
+              ? fetchProgress > 0
+                ? `Fetching round ${fetchProgress} of ${GAME_ROUNDS}…`
+                : 'Loading questions…'
+              : 'Start Game'}
           </button>
+
+          {starting && (
+            <div className="w-full max-w-xs h-2 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-brand-yellow rounded-full transition-all duration-500"
+                style={{ width: `${(fetchProgress / GAME_ROUNDS) * 100}%` }}
+              />
+            </div>
+          )}
+
           {error && <p className="text-red-400 text-sm">{error}</p>}
           <p className="text-white/40 text-xs">Only visible to organiser</p>
         </div>
