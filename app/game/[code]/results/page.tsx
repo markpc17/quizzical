@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Image from 'next/image'
 import confetti from 'canvas-confetti'
 import { Leaderboard, LeaderboardEntry } from '@/components/game/Leaderboard'
 import { useGameState } from '@/hooks/useGameState'
@@ -13,19 +14,17 @@ export default function ResultsPage() {
 
   const { players, myPlayerId, loading } = useGameState(code)
 
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+
   // Build and sort leaderboard
-  const leaderboardEntries: LeaderboardEntry[] = players
-    .map((p) => ({
-      playerId: p.id,
-      displayName: p.display_name,
-      avatarId: p.avatar_id,
-      totalScore: p.total_score,
-      totalTimeMs: p.total_time_ms,
-    }))
-    .sort((a, b) => {
-      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore
-      return a.totalTimeMs - b.totalTimeMs
-    })
+  const leaderboardEntries: LeaderboardEntry[] = players.map((p) => ({
+    playerId: p.id,
+    displayName: p.display_name,
+    avatarId: p.avatar_id,
+    totalScore: p.total_score,
+    totalTimeMs: p.total_time_ms,
+  }))
 
   const winner = leaderboardEntries[0]
 
@@ -55,6 +54,21 @@ export default function ResultsPage() {
     return () => { cancelled = true }
   }, [winner?.playerId])
 
+  async function handlePlayAgain() {
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const res = await fetch('/api/games', { method: 'POST' })
+      if (!res.ok) throw new Error('Failed to create game')
+      const { code: newCode, organiserToken } = await res.json()
+      localStorage.setItem(`quizzicle-organiser-${newCode}`, organiserToken)
+      router.push(`/game/${newCode}/lobby`)
+    } catch {
+      setCreateError('Could not create game — please try again.')
+      setCreating(false)
+    }
+  }
+
   if (loading || !winner) {
     return (
       <main className="min-h-screen bg-brand-dark flex items-center justify-center">
@@ -73,12 +87,11 @@ export default function ResultsPage() {
       {/* Winner spotlight */}
       <div className="bg-brand-card rounded-2xl p-6 text-center border border-white/10 w-full max-w-sm">
         <p className="text-white/50 text-sm mb-3">🏆 Champion</p>
-        <img
+        <Image
           src={`https://api.dicebear.com/9.x/fun-emoji/svg?seed=${winner.avatarId}`}
           alt={winner.displayName}
           width={128}
           height={128}
-          loading="lazy"
           className="rounded-full w-32 h-32 mx-auto mb-3 ring-4 ring-brand-yellow"
         />
         <p className="font-fredoka text-3xl text-white">{winner.displayName}</p>
@@ -89,12 +102,17 @@ export default function ResultsPage() {
 
       <Leaderboard entries={leaderboardEntries} highlightPlayerId={myPlayerId ?? undefined} />
 
+      {createError && (
+        <p className="text-red-400 text-sm">{createError}</p>
+      )}
+
       <button
         type="button"
-        onClick={() => router.push('/')}
-        className="mt-4 rounded-2xl bg-brand-purple px-10 py-4 font-fredoka text-2xl text-white hover:bg-brand-purple/80 transition-colors"
+        disabled={creating}
+        onClick={handlePlayAgain}
+        className="mt-4 rounded-2xl bg-brand-purple px-10 py-4 font-fredoka text-2xl text-white hover:bg-brand-purple/80 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        Play Again
+        {creating ? 'Creating…' : 'Play Again'}
       </button>
     </main>
   )
