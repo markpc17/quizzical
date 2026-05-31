@@ -18,13 +18,18 @@ export default function ResultsPage() {
   const [createError, setCreateError] = useState<string | null>(null)
 
   // Build and sort leaderboard
-  const leaderboardEntries: LeaderboardEntry[] = players.map((p) => ({
-    playerId: p.id,
-    displayName: p.display_name,
-    avatarId: p.avatar_id,
-    totalScore: p.total_score,
-    totalTimeMs: p.total_time_ms,
-  }))
+  const leaderboardEntries: LeaderboardEntry[] = players
+    .map((p) => ({
+      playerId: p.id,
+      displayName: p.display_name,
+      avatarId: p.avatar_id,
+      totalScore: p.total_score,
+      totalTimeMs: p.total_time_ms,
+    }))
+    .sort((a, b) => {
+      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore
+      return a.totalTimeMs - b.totalTimeMs
+    })
 
   const winner = leaderboardEntries[0]
 
