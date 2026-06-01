@@ -47,14 +47,17 @@ export async function POST(
   const { current_round, current_question } = game
   const now = new Date().toISOString()
 
-  // Handle "start_round" trigger: if status is 'round_end', begin the new round
+  // Handle "start_round" trigger: if status is 'round_end', begin the new round.
+  // current_round still points to the completed round, so the next round is current_round + 1.
   if (game.status === 'round_end') {
-    // Find the round row for the current round number
+    const nextRound = current_round + 1
+
+    // Find the round row for the NEXT round
     const { data: roundData, error: roundError } = await supabase
       .from('rounds')
       .select('id')
       .eq('game_id', game.id)
-      .eq('round_number', current_round)
+      .eq('round_number', nextRound)
       .single()
 
     if (roundError || !roundData) {
@@ -74,10 +77,10 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to open first question' }, { status: 500 })
     }
 
-    // Transition game back to round_active — optimistic lock on status
+    // Transition game to round_active and advance current_round — optimistic lock on status
     const { data: updated, error: updateError } = await supabase
       .from('games')
-      .update({ status: 'round_active', current_question: 0 })
+      .update({ status: 'round_active', current_round: nextRound, current_question: 0 })
       .eq('id', game.id)
       .eq('status', 'round_end')
       .select('id')
@@ -149,14 +152,13 @@ export async function POST(
   // current_question === QUESTIONS_PER_ROUND - 1 — end of the round
 
   if (current_round < GAME_ROUNDS) {
-    // Move to the next round (round_end state; organiser calls /next again to start it)
-    const nextRound = current_round + 1
-
+    // End the round — current_round intentionally stays on the completed round so the
+    // round-end screen can display the correct round number. It advances to nextRound
+    // only when the organiser calls /next again to start the following round.
     const { data: updated, error: updateError } = await supabase
       .from('games')
       .update({
         status: 'round_end',
-        current_round: nextRound,
         current_question: 0,
       })
       .eq('id', game.id)
