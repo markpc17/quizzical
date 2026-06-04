@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClientUntyped } from '@/lib/supabase/admin'
 import { decodeHtmlEntities, shuffleArray, GAME_ROUNDS, QUESTIONS_PER_ROUND } from '@/lib/game-utils'
 
-interface OpenTDBCategory {
+interface QuizCategory {
   id: number
   name: string
 }
@@ -14,29 +14,53 @@ interface OpenTDBQuestion {
   difficulty: string
 }
 
-interface OpenTDBCategoryResponse {
-  trivia_categories: OpenTDBCategory[]
-}
-
 interface OpenTDBQuestionsResponse {
   response_code: number
   results: OpenTDBQuestion[]
 }
 
-async function fetchCategories(): Promise<OpenTDBCategory[]> {
-  const res = await fetch('https://opentdb.com/api_category.php')
-  if (!res.ok) throw new Error(`OpenTDB category fetch failed: ${res.status}`)
-  const json = (await res.json()) as OpenTDBCategoryResponse
-  return json.trivia_categories
-}
+/**
+ * Curated category pool mapped to OpenTDB category IDs.
+ * 5 are chosen at random each game with no repeats.
+ */
+const QUIZ_CATEGORIES: QuizCategory[] = [
+  { id: 22, name: 'Geography' },
+  { id: 23, name: 'History' },
+  { id: 17, name: 'Science & Nature' },
+  { id: 26, name: 'Pop Culture' },
+  { id: 12, name: 'Music' },
+  { id: 11, name: 'Film & TV' },
+  { id: 21, name: 'Sports' },
+  { id: 10, name: 'Literature' },
+  { id: 18, name: 'Technology' },
+  { id: 25, name: 'Art & Architecture' },
+  { id: 20, name: 'Mythology' },
+  { id: 24, name: 'Politics & World Affairs' },
+  { id: 28, name: 'Cars & Transport' },
+  { id: 27, name: 'Animals & Wildlife' },
+]
 
-async function fetchQuestionsForCategory(categoryId: number): Promise<OpenTDBQuestion[] | null> {
-  const url = `https://opentdb.com/api.php?amount=10&category=${categoryId}&type=multiple`
-  const res = await fetch(url)
+async function fetchQuestionsForCategory(
+  categoryId: number,
+  difficulty: string,
+  sessionToken?: string
+): Promise<OpenTDBQuestion[] | null> {
+  const diffParam = difficulty !== 'mixed' ? `&difficulty=${difficulty}` : ''
+  const tokenParam = sessionToken ? `&token=${sessionToken}` : ''
+  const url = `https://opentdb.com/api.php?amount=${QUESTIONS_PER_ROUND}&category=${categoryId}&type=multiple${diffParam}${tokenParam}`
+  const res = await fetch(url, { cache: 'no-store' })
   if (!res.ok) return null
   const json = (await res.json()) as OpenTDBQuestionsResponse
-  // response_code 0 = success, 1 = no results
-  if (json.response_code !== 0 || json.results.length < 10) return null
+  // response_code 5 = rate limited — wait and retry once
+  if (json.response_code === 5) {
+    await new Promise(resolve => setTimeout(resolve, 5000))
+    const retry = await fetch(url, { cache: 'no-store' })
+    if (!retry.ok) return null
+    const retryJson = (await retry.json()) as OpenTDBQuestionsResponse
+    if (retryJson.response_code !== 0 || retryJson.results.length < QUESTIONS_PER_ROUND) return null
+    return retryJson.results
+  }
+  if (json.response_code !== 0 || json.results.length < QUESTIONS_PER_ROUND) return null
   return json.results
 }
 
@@ -47,11 +71,17 @@ export async function POST(
   const { code } = await params
 
   const body = await request.json().catch(() => ({}))
-  const { organiserToken } = body as { organiserToken?: unknown }
+  const { organiserToken, difficulty: rawDifficulty } = body as {
+    organiserToken?: unknown
+    difficulty?: unknown
+  }
+  const difficulty =
+    typeof rawDifficulty === 'string' && ['easy', 'medium', 'hard', 'mixed'].includes(rawDifficulty)
+      ? rawDifficulty
+      : 'medium'
 
   const supabase = createAdminClientUntyped()
 
-  // Fetch game
   const { data: gameData, error: gameError } = await supabase
     .from('games')
     .select('id, status, organiser_token')
@@ -75,39 +105,45 @@ export async function POST(
   // Clean up any partial previous attempt
   const { data: existingRounds } = await supabase.from('rounds').select('id').eq('game_id', game.id)
   if (existingRounds && existingRounds.length > 0) {
-    // Previous attempt failed mid-way — clean up (questions cascade-delete via FK)
     await supabase.from('rounds').delete().eq('game_id', game.id)
   }
 
-  // Fetch OpenTDB categories and pick 5 distinct ones
-  let allCategories: OpenTDBCategory[]
+  // Request an OpenTDB session token to prevent duplicate questions across rounds
+  let sessionToken: string | undefined
   try {
-    allCategories = await fetchCategories()
-  } catch (err) {
-    console.error('[POST /api/games/[code]/start] fetchCategories', err)
-    return NextResponse.json({ error: 'Failed to fetch quiz categories' }, { status: 502 })
+    const tokenRes = await fetch('https://opentdb.com/api_token.php?command=request', { cache: 'no-store' })
+    if (tokenRes.ok) {
+      const tokenJson = (await tokenRes.json()) as { token?: string }
+      sessionToken = tokenJson.token
+    }
+  } catch {
+    // Proceed without session token — questions may occasionally repeat
   }
 
-  shuffleArray(allCategories)
+  const categoryPool = [...QUIZ_CATEGORIES]
+  shuffleArray(categoryPool)
+  const candidates = categoryPool.slice(0, GAME_ROUNDS + 3) // extra candidates in case some fail
 
-  // Try categories until we have 5 with enough questions
-  const selectedRounds: Array<{ category: OpenTDBCategory; questions: OpenTDBQuestion[] }> = []
-  let categoryIndex = 0
+  const fetchResults = await Promise.allSettled(
+    candidates.map((category) =>
+      fetchQuestionsForCategory(category.id, difficulty, sessionToken)
+        .then((questions) => ({ category, questions }))
+        .catch(() => ({ category, questions: null }))
+    )
+  )
 
-  while (selectedRounds.length < GAME_ROUNDS && categoryIndex < allCategories.length) {
-    const category = allCategories[categoryIndex]
-    categoryIndex++
-
-    let questions: OpenTDBQuestion[] | null = null
-    try {
-      questions = await fetchQuestionsForCategory(category.id)
-    } catch {
-      // Skip this category on error
-      continue
-    }
-
-    if (questions && questions.length >= QUESTIONS_PER_ROUND) {
-      selectedRounds.push({ category, questions: questions.slice(0, QUESTIONS_PER_ROUND) })
+  const selectedRounds: Array<{ category: QuizCategory; questions: OpenTDBQuestion[] }> = []
+  for (const result of fetchResults) {
+    if (selectedRounds.length >= GAME_ROUNDS) break
+    if (
+      result.status === 'fulfilled' &&
+      result.value.questions &&
+      result.value.questions.length >= QUESTIONS_PER_ROUND
+    ) {
+      selectedRounds.push({
+        category: result.value.category,
+        questions: result.value.questions.slice(0, QUESTIONS_PER_ROUND),
+      })
     }
   }
 
@@ -120,7 +156,7 @@ export async function POST(
     game_id: game.id,
     round_number: idx + 1,
     category_id: r.category.id,
-    category_name: decodeHtmlEntities(r.category.name),
+    category_name: r.category.name,
   }))
 
   const { data: insertedRoundsData, error: roundsError } = await supabase
@@ -134,14 +170,11 @@ export async function POST(
   }
 
   const insertedRounds = insertedRoundsData as Array<{ id: string; round_number: number }>
-
-  // Build a map: round_number -> round id
   const roundIdByNumber: Record<number, string> = {}
   for (const r of insertedRounds) {
     roundIdByNumber[r.round_number] = r.id
   }
 
-  // Insert questions (50 total — 10 per round)
   const now = new Date().toISOString()
   const questionInserts = selectedRounds.flatMap((r, roundIdx) =>
     r.questions.map((q, qIdx) => ({
@@ -150,7 +183,6 @@ export async function POST(
       question_text: decodeHtmlEntities(q.question),
       correct_answer: decodeHtmlEntities(q.correct_answer),
       incorrect_answers: q.incorrect_answers.map(decodeHtmlEntities),
-      // Set opened_at on the very first question of round 1 only
       opened_at: roundIdx === 0 && qIdx === 0 ? now : null,
     }))
   )
@@ -162,14 +194,9 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to create questions' }, { status: 500 })
   }
 
-  // Update game status
   const { error: updateError } = await supabase
     .from('games')
-    .update({
-      status: 'round_active',
-      current_round: 1,
-      current_question: 0,
-    })
+    .update({ status: 'round_active', current_round: 1, current_question: 0 })
     .eq('id', game.id)
 
   if (updateError) {
