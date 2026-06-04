@@ -36,6 +36,10 @@ export default function PlayPage() {
   const [locked, setLocked] = useState(false)
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
 
+  // Stable derived value — avoids re-running the effect on every render when players array
+  // gets a new reference but its contents haven't changed
+  const playerIds = players.map(p => p.id).join(',')
+
   // Silent rejoin if player token is in localStorage but player not in game list
   useEffect(() => {
     if (loading || !game || game.status !== 'round_active') return
@@ -63,7 +67,8 @@ export default function PlayPage() {
     } catch {
       // ignore corrupt localStorage
     }
-  }, [loading, game?.status, myPlayerId, players, code])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- playerIds is a stable string derived from players
+  }, [loading, game?.status, myPlayerId, playerIds, code])
 
   // Reset answer state when question changes
   useEffect(() => {

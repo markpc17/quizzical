@@ -20,19 +20,6 @@ export async function POST(
     playerToken?: unknown
   }
 
-  // Validate displayName
-  if (typeof displayName !== 'string' || displayName.trim().length === 0) {
-    return NextResponse.json({ error: 'displayName must be a non-empty string' }, { status: 400 })
-  }
-  if (displayName.trim().length > 20) {
-    return NextResponse.json({ error: 'displayName must be 20 characters or fewer' }, { status: 400 })
-  }
-
-  // Validate avatarId
-  if (typeof avatarId !== 'number' || !Number.isInteger(avatarId) || avatarId < 1 || avatarId > 20) {
-    return NextResponse.json({ error: 'avatarId must be an integer between 1 and 20' }, { status: 400 })
-  }
-
   const supabase = createAdminClientUntyped()
 
   // Look up game by code
@@ -48,7 +35,8 @@ export async function POST(
 
   const game = gameData as { id: string; status: string; expires_at: string | null }
 
-  // Rejoin: if caller provides an existing player token, return that player's data
+  // Rejoin fast-path: if caller provides an existing player token, return that player's data
+  // Must run BEFORE displayName/avatarId validation — rejoin sends empty strings for those fields
   if (typeof incomingToken === 'string' && incomingToken.length > 0) {
     const { data: existingPlayer } = await supabase
       .from('players')
@@ -62,6 +50,19 @@ export async function POST(
       return NextResponse.json({ playerId: p.id, playerToken: p.player_token, rejoined: true })
     }
     // Token not found — fall through to create a new player
+  }
+
+  // Validate displayName (only needed for new player creation)
+  if (typeof displayName !== 'string' || displayName.trim().length === 0) {
+    return NextResponse.json({ error: 'displayName must be a non-empty string' }, { status: 400 })
+  }
+  if (displayName.trim().length > 20) {
+    return NextResponse.json({ error: 'displayName must be 20 characters or fewer' }, { status: 400 })
+  }
+
+  // Validate avatarId (only needed for new player creation)
+  if (typeof avatarId !== 'number' || !Number.isInteger(avatarId) || avatarId < 1 || avatarId > 20) {
+    return NextResponse.json({ error: 'avatarId must be an integer between 1 and 20' }, { status: 400 })
   }
 
   if (game.status !== 'lobby') {
