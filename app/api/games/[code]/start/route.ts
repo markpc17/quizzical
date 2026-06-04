@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClientUntyped } from '@/lib/supabase/admin'
 import { decodeHtmlEntities, shuffleArray, GAME_ROUNDS, QUESTIONS_PER_ROUND } from '@/lib/game-utils'
+import { getFallbackRounds } from '@/lib/fallback-questions'
 
 interface QuizCategory {
   id: number
@@ -148,7 +149,13 @@ export async function POST(
   }
 
   if (selectedRounds.length < GAME_ROUNDS) {
-    return NextResponse.json({ error: 'Could not fetch enough quiz questions from OpenTDB' }, { status: 502 })
+    const usedIds = new Set(selectedRounds.map((r) => r.category.id))
+    const fallback = getFallbackRounds(GAME_ROUNDS - selectedRounds.length, usedIds)
+    selectedRounds.push(...fallback)
+  }
+
+  if (selectedRounds.length < GAME_ROUNDS) {
+    return NextResponse.json({ error: 'Could not fetch enough quiz questions' }, { status: 502 })
   }
 
   // Insert rounds
