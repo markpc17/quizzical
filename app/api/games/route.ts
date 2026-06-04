@@ -10,9 +10,11 @@ export async function POST() {
 
     const organiserToken = crypto.randomUUID()
 
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+
     const { data, error } = await supabase
       .from('games')
-      .insert({ code, status: 'lobby', organiser_token: organiserToken })
+      .insert({ code, status: 'lobby', organiser_token: organiserToken, expires_at: expiresAt })
       .select('id, code')
       .single()
 

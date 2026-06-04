@@ -115,6 +115,23 @@ export default function LobbyPage() {
     )
   }
 
+  if (!loading && game && game.expires_at && new Date(game.expires_at) < new Date()) {
+    return (
+      <main className="min-h-screen bg-brand-dark flex items-center justify-center px-4">
+        <div className="text-center">
+          <p className="font-fredoka text-3xl text-brand-yellow mb-2">Game Expired</p>
+          <p className="text-white/60 mb-6">This game code is no longer valid.</p>
+          <a
+            href="/"
+            className="rounded-2xl bg-brand-purple px-8 py-3 font-fredoka text-xl text-white hover:bg-brand-purple/80 transition-colors"
+          >
+            Create a new game
+          </a>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="min-h-screen bg-brand-dark px-4 py-8 flex flex-col gap-8 max-w-2xl mx-auto">
       {/* Game code */}

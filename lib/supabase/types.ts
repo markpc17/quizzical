@@ -8,6 +8,7 @@ export interface Game {
   current_question: number
   created_at: string
   organiser_token: string | null
+  expires_at: string | null
 }
 
 export interface Player {
@@ -56,6 +57,7 @@ export interface GamesInsert {
   current_round?: number
   current_question?: number
   organiser_token?: string | null
+  expires_at?: string | null
 }
 
 export interface PlayersInsert {

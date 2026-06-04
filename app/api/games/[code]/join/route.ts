@@ -34,7 +34,7 @@ export async function POST(
   // Look up game by code
   const { data: gameData, error: gameError } = await supabase
     .from('games')
-    .select('id, status')
+    .select('id, status, expires_at')
     .eq('code', code.toUpperCase())
     .single()
 
@@ -42,19 +42,35 @@ export async function POST(
     return NextResponse.json({ error: 'Game not found' }, { status: 404 })
   }
 
-  const game = gameData as { id: string; status: string }
+  const game = gameData as { id: string; status: string; expires_at: string | null }
 
   if (game.status !== 'lobby') {
     return NextResponse.json({ error: 'Game has already started' }, { status: 409 })
   }
 
-  // Insert player
+  if (game.expires_at && new Date(game.expires_at) < new Date()) {
+    return NextResponse.json({ error: 'Game has expired' }, { status: 410 })
+  }
+
+  // Enforce player cap
+  const { count } = await supabase
+    .from('players')
+    .select('id', { count: 'exact', head: true })
+    .eq('game_id', game.id)
+
+  if ((count ?? 0) >= 30) {
+    return NextResponse.json({ error: 'Game is full' }, { status: 409 })
+  }
+
+  // Single insert with token — avoids the brief window where player_token is null
+  const playerToken = crypto.randomUUID()
   const { data: playerData, error: insertError } = await supabase
     .from('players')
     .insert({
       game_id: game.id,
       display_name: displayName.trim(),
       avatar_id: avatarId,
+      player_token: playerToken,
     })
     .select('id')
     .single()
@@ -65,18 +81,6 @@ export async function POST(
   }
 
   const player = playerData as { id: string }
-  const playerToken = crypto.randomUUID()
-
-  // Persist the player token
-  const { error: tokenError } = await supabase
-    .from('players')
-    .update({ player_token: playerToken })
-    .eq('id', player.id)
-
-  if (tokenError) {
-    console.error('[POST /api/games/[code]/join] token update', tokenError)
-    return NextResponse.json({ error: 'Failed to join game' }, { status: 500 })
-  }
 
   return NextResponse.json({ playerId: player.id, playerToken })
 }
