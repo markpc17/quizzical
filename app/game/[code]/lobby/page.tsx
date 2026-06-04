@@ -145,6 +145,16 @@ export default function LobbyPage() {
         >
           {copied ? '✓ Copied!' : 'Copy Link'}
         </button>
+        <div className="mt-2">
+          <a
+            href={`/game/${code}/spectate`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-white/40 text-sm underline hover:text-white/70 transition-colors"
+          >
+            Spectator view
+          </a>
+        </div>
       </div>
 
       {/* Players in lobby */}
