@@ -14,7 +14,11 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { displayName, avatarId } = body as { displayName?: unknown; avatarId?: unknown }
+  const { displayName, avatarId, playerToken: incomingToken } = body as {
+    displayName?: unknown
+    avatarId?: unknown
+    playerToken?: unknown
+  }
 
   // Validate displayName
   if (typeof displayName !== 'string' || displayName.trim().length === 0) {
@@ -43,6 +47,22 @@ export async function POST(
   }
 
   const game = gameData as { id: string; status: string; expires_at: string | null }
+
+  // Rejoin: if caller provides an existing player token, return that player's data
+  if (typeof incomingToken === 'string' && incomingToken.length > 0) {
+    const { data: existingPlayer } = await supabase
+      .from('players')
+      .select('id, player_token')
+      .eq('game_id', game.id)
+      .eq('player_token', incomingToken)
+      .single()
+
+    if (existingPlayer) {
+      const p = existingPlayer as { id: string; player_token: string }
+      return NextResponse.json({ playerId: p.id, playerToken: p.player_token, rejoined: true })
+    }
+    // Token not found — fall through to create a new player
+  }
 
   if (game.status !== 'lobby') {
     return NextResponse.json({ error: 'Game has already started' }, { status: 409 })
