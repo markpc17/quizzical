@@ -33,6 +33,24 @@ export default function ResultsPage() {
 
   const winner = leaderboardEntries[0]
 
+  const myEntry = myPlayerId ? leaderboardEntries.find((e) => e.playerId === myPlayerId) : null
+  const myRank = myEntry ? leaderboardEntries.indexOf(myEntry) + 1 : null
+
+  const [copied, setCopied] = useState(false)
+
+  async function handleShare() {
+    if (!myEntry || myRank === null) return
+    const url = typeof window !== 'undefined' ? window.location.origin : ''
+    const text = `I finished #${myRank} in Quizzicle with ${myEntry.totalScore.toLocaleString()} pts! Play at ${url}`
+    if (navigator.share) {
+      await navigator.share({ text }).catch(() => {/* user cancelled */})
+    } else {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
   useEffect(() => {
     if (!winner) return
     let cancelled = false
@@ -104,6 +122,23 @@ export default function ResultsPage() {
           {winner.totalScore.toLocaleString()} pts
         </p>
       </div>
+
+      {/* Share result — only shown to players who participated */}
+      {myEntry && myRank !== null && (
+        <div className="bg-brand-card rounded-2xl p-5 text-center border border-white/10 w-full max-w-sm">
+          <p className="text-white/50 text-sm mb-1">Your result</p>
+          <p className="font-fredoka text-2xl text-white">
+            #{myRank} &middot; {myEntry.totalScore.toLocaleString()} pts
+          </p>
+          <button
+            type="button"
+            onClick={handleShare}
+            className="mt-4 rounded-xl bg-brand-yellow/20 border border-brand-yellow/40 px-6 py-2 font-fredoka text-lg text-brand-yellow hover:bg-brand-yellow/30 transition-colors"
+          >
+            {copied ? 'Copied!' : 'Share your result'}
+          </button>
+        </div>
+      )}
 
       <Leaderboard entries={leaderboardEntries} highlightPlayerId={myPlayerId ?? undefined} />
 
