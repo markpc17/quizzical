@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -10,6 +10,20 @@ import type { LeaderboardEntry } from '@/components/game/Leaderboard'
 import { useGameState } from '@/hooks/useGameState'
 import { useCountdown } from '@/hooks/useCountdown'
 import { QUESTION_TIME_MS } from '@/lib/game-utils'
+
+function seededShuffle<T>(arr: T[], seed: string): T[] {
+  const result = [...arr]
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+  }
+  for (let i = result.length - 1; i > 0; i--) {
+    hash = (hash * 1664525 + 1013904223) >>> 0
+    const j = hash % (i + 1)
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
 
 export default function SpectatePage() {
   const params = useParams()
@@ -34,6 +48,14 @@ export default function SpectatePage() {
     totalScore: p.total_score,
     totalTimeMs: p.total_time_ms,
   }))
+
+  const shuffledAnswers = useMemo(() => {
+    if (!currentQuestion) return []
+    return seededShuffle(
+      [currentQuestion.correct_answer, ...currentQuestion.incorrect_answers],
+      currentQuestion.id
+    )
+  }, [currentQuestion?.id])
 
   const roundNumber = currentRound?.round_number ?? game?.current_round ?? 1
   const questionNumber = (currentQuestion?.question_number ?? game?.current_question ?? 0) + 1
@@ -110,15 +132,12 @@ export default function SpectatePage() {
                 </p>
               </div>
 
-              {/* Answers — displayed but not clickable */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[
-                  currentQuestion.correct_answer,
-                  ...currentQuestion.incorrect_answers,
-                ].map((answer) => (
+              {/* Answers — displayed but not clickable, shuffled to hide correct position */}
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                {shuffledAnswers.map((answer, i) => (
                   <div
-                    key={answer}
-                    className="rounded-xl bg-brand-card border border-white/10 px-4 py-3 text-white/70 font-fredoka text-lg cursor-default select-none"
+                    key={i}
+                    className="rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-white/70 font-fredoka text-center select-none"
                   >
                     {answer}
                   </div>
