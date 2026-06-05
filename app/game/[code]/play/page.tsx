@@ -175,7 +175,7 @@ export default function PlayPage() {
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-brand-card border-b border-white/10">
         <div>
           <p className="text-white/50 text-xs uppercase tracking-widest">
-            Round {roundNumber} · Q{questionNumber}
+            Round {roundNumber} of {game?.total_rounds ?? 5} · Q{questionNumber}
           </p>
           <p className="text-white font-medium text-sm">{category}</p>
         </div>

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClientUntyped } from '@/lib/supabase/admin'
-import { decodeHtmlEntities, shuffleArray, GAME_ROUNDS, QUESTIONS_PER_ROUND } from '@/lib/game-utils'
+import { decodeHtmlEntities, shuffleArray, QUESTIONS_PER_ROUND } from '@/lib/game-utils'
 import { getFallbackRounds } from '@/lib/fallback-questions'
 
 interface QuizCategory {
@@ -72,14 +72,19 @@ export async function POST(
   const { code } = await params
 
   const body = await request.json().catch(() => ({}))
-  const { organiserToken, difficulty: rawDifficulty } = body as {
+  const { organiserToken, difficulty: rawDifficulty, rounds: rawRounds } = body as {
     organiserToken?: unknown
     difficulty?: unknown
+    rounds?: unknown
   }
   const difficulty =
     typeof rawDifficulty === 'string' && ['easy', 'medium', 'hard', 'mixed'].includes(rawDifficulty)
       ? rawDifficulty
       : 'medium'
+  const rounds =
+    typeof rawRounds === 'number' && [3, 5, 10].includes(rawRounds)
+      ? rawRounds
+      : 5
 
   const supabase = createAdminClientUntyped()
 
@@ -123,7 +128,7 @@ export async function POST(
 
   const categoryPool = [...QUIZ_CATEGORIES]
   shuffleArray(categoryPool)
-  const candidates = categoryPool.slice(0, GAME_ROUNDS + 3) // extra candidates in case some fail
+  const candidates = categoryPool.slice(0, rounds + 3) // extra candidates in case some fail
 
   const fetchResults = await Promise.allSettled(
     candidates.map((category) =>
@@ -135,7 +140,7 @@ export async function POST(
 
   const selectedRounds: Array<{ category: QuizCategory; questions: OpenTDBQuestion[] }> = []
   for (const result of fetchResults) {
-    if (selectedRounds.length >= GAME_ROUNDS) break
+    if (selectedRounds.length >= rounds) break
     if (
       result.status === 'fulfilled' &&
       result.value.questions &&
@@ -148,13 +153,13 @@ export async function POST(
     }
   }
 
-  if (selectedRounds.length < GAME_ROUNDS) {
+  if (selectedRounds.length < rounds) {
     const usedIds = new Set(selectedRounds.map((r) => r.category.id))
-    const fallback = getFallbackRounds(GAME_ROUNDS - selectedRounds.length, usedIds)
+    const fallback = getFallbackRounds(rounds - selectedRounds.length, usedIds)
     selectedRounds.push(...fallback)
   }
 
-  if (selectedRounds.length < GAME_ROUNDS) {
+  if (selectedRounds.length < rounds) {
     return NextResponse.json({ error: 'Could not fetch enough quiz questions' }, { status: 502 })
   }
 
@@ -203,7 +208,7 @@ export async function POST(
 
   const { error: updateError } = await supabase
     .from('games')
-    .update({ status: 'round_active', current_round: 1, current_question: 0 })
+    .update({ status: 'round_active', current_round: 1, current_question: 0, total_rounds: rounds })
     .eq('id', game.id)
 
   if (updateError) {

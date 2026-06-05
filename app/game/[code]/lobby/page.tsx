@@ -6,7 +6,6 @@ import Image from 'next/image'
 import { AvatarPicker } from '@/components/game/AvatarPicker'
 import { PlayerChip } from '@/components/game/PlayerChip'
 import { useGameState } from '@/hooks/useGameState'
-import { GAME_ROUNDS } from '@/lib/game-utils'
 
 export default function LobbyPage() {
   const params = useParams()
@@ -18,6 +17,7 @@ export default function LobbyPage() {
   const [displayName, setDisplayName] = useState('')
   const [selectedAvatar, setSelectedAvatar] = useState<number | null>(null)
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard' | 'mixed'>('medium')
+  const [roundCount, setRoundCount] = useState<3 | 5 | 10>(5)
   const [joining, setJoining] = useState(false)
   const [joined, setJoined] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -43,7 +43,7 @@ export default function LobbyPage() {
       return
     }
     const interval = setInterval(() => {
-      setFetchProgress((prev) => Math.min(prev + 1, GAME_ROUNDS))
+      setFetchProgress((prev) => Math.min(prev + 1, roundCount))
     }, 1500)
     return () => clearInterval(interval)
   }, [starting])
@@ -84,7 +84,7 @@ export default function LobbyPage() {
       const res = await fetch(`/api/games/${code}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organiserToken, difficulty }),
+        body: JSON.stringify({ organiserToken, difficulty, rounds: roundCount }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -247,6 +247,31 @@ export default function LobbyPage() {
             </p>
           </div>
 
+          {isOrganiser && (
+            <div className="bg-brand-card rounded-2xl p-5 w-full">
+              <p className="text-white/60 text-sm font-fredoka mb-3">Number of Rounds</p>
+              <div className="flex gap-2">
+                {([3, 5, 10] as const).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRoundCount(n)}
+                    className={`flex-1 rounded-xl py-2 font-fredoka text-base transition-colors ${
+                      roundCount === n
+                        ? 'bg-brand-purple text-white'
+                        : 'bg-white/10 text-white/60 hover:bg-white/20'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="text-white/40 text-xs mt-2">
+                {roundCount * 10} questions · ~{roundCount * 3} mins
+              </p>
+            </div>
+          )}
+
           <button
             type="button"
             disabled={starting}
@@ -255,7 +280,7 @@ export default function LobbyPage() {
           >
             {starting
               ? fetchProgress > 0
-                ? `Fetching round ${fetchProgress} of ${GAME_ROUNDS}…`
+                ? `Fetching round ${fetchProgress} of ${roundCount}…`
                 : 'Loading questions…'
               : 'Start Game'}
           </button>
@@ -264,7 +289,7 @@ export default function LobbyPage() {
             <div className="w-full max-w-xs h-2 bg-white/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-brand-yellow rounded-full transition-all duration-500"
-                style={{ width: `${(fetchProgress / GAME_ROUNDS) * 100}%` }}
+                style={{ width: `${(fetchProgress / roundCount) * 100}%` }}
               />
             </div>
           )}

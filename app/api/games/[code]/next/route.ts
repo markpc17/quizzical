@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClientUntyped } from '@/lib/supabase/admin'
-import { GAME_ROUNDS, QUESTIONS_PER_ROUND } from '@/lib/game-utils'
+import { QUESTIONS_PER_ROUND } from '@/lib/game-utils'
 
 export async function POST(
   request: Request,
@@ -16,7 +16,7 @@ export async function POST(
   // Fetch current game state
   const { data: gameData, error: gameError } = await supabase
     .from('games')
-    .select('id, status, current_round, current_question, organiser_token')
+    .select('id, status, current_round, current_question, total_rounds, organiser_token')
     .eq('code', code.toUpperCase())
     .single()
 
@@ -29,6 +29,7 @@ export async function POST(
     status: string
     current_round: number
     current_question: number
+    total_rounds: number
     organiser_token: string | null
   }
 
@@ -151,7 +152,7 @@ export async function POST(
 
   // current_question === QUESTIONS_PER_ROUND - 1 — end of the round
 
-  if (current_round < GAME_ROUNDS) {
+  if (current_round < game.total_rounds) {
     // End the round — current_round intentionally stays on the completed round so the
     // round-end screen can display the correct round number. It advances to nextRound
     // only when the organiser calls /next again to start the following round.

@@ -6,6 +6,7 @@ export interface Game {
   status: GameStatus
   current_round: number
   current_question: number
+  total_rounds: number
   created_at: string
   organiser_token: string | null
   expires_at: string | null
@@ -56,6 +57,7 @@ export interface GamesInsert {
   status?: GameStatus
   current_round?: number
   current_question?: number
+  total_rounds?: number
   organiser_token?: string | null
   expires_at?: string | null
 }

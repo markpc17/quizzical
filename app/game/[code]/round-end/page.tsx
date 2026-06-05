@@ -84,7 +84,9 @@ export default function RoundEndPage() {
         />
       )}
 
-      <h2 className="font-fredoka text-3xl text-white mt-4">Leaderboard</h2>
+      <h2 className="font-fredoka text-3xl text-white mt-4">
+        Round {currentRound?.round_number ?? game?.current_round ?? 1} of {game?.total_rounds ?? 5} — Leaderboard
+      </h2>
       <Leaderboard entries={leaderboardEntries} />
 
       <button
