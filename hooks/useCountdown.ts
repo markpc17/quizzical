@@ -7,28 +7,31 @@ import { useState, useEffect } from 'react'
  * Ticks every 100 ms. Returns 0 when expired.
  */
 export function useCountdown(openedAt: string | null, totalMs: number): number {
-  const getRemaining = () => {
+  const [remaining, setRemaining] = useState<number>(() => {
     if (!openedAt) return totalMs / 1000
     const elapsed = Date.now() - new Date(openedAt).getTime()
     return Math.max(0, (totalMs - elapsed) / 1000)
-  }
-
-  const [remaining, setRemaining] = useState<number>(getRemaining)
+  })
 
   useEffect(() => {
+    const calc = () => {
+      if (!openedAt) return totalMs / 1000
+      const elapsed = Date.now() - new Date(openedAt).getTime()
+      return Math.max(0, (totalMs - elapsed) / 1000)
+    }
+
     // Reset immediately when openedAt changes
-    setRemaining(getRemaining())
+    setRemaining(calc())
 
     if (!openedAt) return
 
     const interval = setInterval(() => {
-      const r = getRemaining()
+      const r = calc()
       setRemaining(r)
       if (r <= 0) clearInterval(interval)
     }, 100)
 
     return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openedAt, totalMs])
 
   return remaining

@@ -38,7 +38,7 @@ export default function Home() {
       if (!res.ok) throw new Error('Failed to create game')
       const { code, organiserToken } = await res.json()
       localStorage.setItem(`quizzicle-organiser-${code}`, organiserToken)
-      router.push(`/game/${code}/lobby?organiser=${organiserToken}`)
+      router.push(`/game/${code}/lobby`)
     } catch (err) {
       setError('Could not create game — please try again.')
       setCreating(false)

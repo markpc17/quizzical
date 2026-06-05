@@ -88,7 +88,7 @@ export async function POST(
   // Verify the player belongs to this game
   const { data: playerData, error: playerError } = await supabase
     .from('players')
-    .select('id, game_id, total_score, total_time_ms, player_token')
+    .select('id, game_id, player_token')
     .eq('id', playerId)
     .eq('game_id', game.id)
     .single()
@@ -99,8 +99,6 @@ export async function POST(
   const player = playerData as {
     id: string
     game_id: string
-    total_score: number
-    total_time_ms: number
     player_token: string | null
   }
 
@@ -136,16 +134,13 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to record answer' }, { status: 500 })
   }
 
-  // Update player score if correct — optimistic lock prevents double-count on retry
+  // Update player score atomically via RPC — prevents double-count on concurrent retries
   if (isCorrect) {
-    const { error: scoreError } = await supabase
-      .from('players')
-      .update({
-        total_score: player.total_score + 1,
-        total_time_ms: player.total_time_ms + timeTakenMs,
-      })
-      .eq('id', playerId)
-      .eq('total_score', player.total_score) // optimistic lock — prevents double-count if retried
+    const { error: scoreError } = await supabase.rpc('increment_player_score', {
+      p_player_id: playerId,
+      p_score_delta: 1,
+      p_time_delta: timeTakenMs,
+    })
 
     if (scoreError) {
       // Log but don't fail — score update failure is non-critical for the answer record

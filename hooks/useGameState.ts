@@ -83,6 +83,7 @@ export function useGameState(code: string): GameState {
 
   // Keep a stable ref to the supabase client so we can remove channels in cleanup
   const supabaseRef = useRef(createClient())
+  const channelRef = useRef<ReturnType<typeof supabaseRef.current.channel> | null>(null)
 
   // Mirror of players state — used for reads in realtime callbacks without setPlayers abuse
   const playersRef = useRef<Player[]>([])
@@ -94,7 +95,7 @@ export function useGameState(code: string): GameState {
       ...currentQuestion.incorrect_answers,
       currentQuestion.correct_answer,
     ])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-shuffle only when question ID changes, not on every score update
   }, [currentQuestion?.id])
 
   // Read localStorage (SSR-safe: must be inside useEffect)
@@ -166,8 +167,8 @@ export function useGameState(code: string): GameState {
         if (!cancelled) setCurrentRound(round)
       }
 
-      // 4. Fetch current question
-      if (round && gameRow.current_question > 0) {
+      // 4. Fetch current question (current_question is 0-indexed)
+      if (round && gameRow.status === 'round_active') {
         const { data: questionData } = await supabase
           .from('questions')
           .select('*')
@@ -184,6 +185,7 @@ export function useGameState(code: string): GameState {
       }
 
       if (!cancelled) setLoading(false)
+      if (cancelled) return
 
       // ── Realtime subscriptions ──────────────────────────────────────────
       const channel = supabase
@@ -217,8 +219,8 @@ export function useGameState(code: string): GameState {
               }
             }
 
-            // Fetch new question when question number advances
-            if (round && updated.current_question > 0) {
+            // Fetch new question when question number advances (0-indexed)
+            if (round && updated.status === 'round_active') {
               const { data: questionData } = await supabase
                 .from('questions')
                 .select('*')
@@ -292,18 +294,18 @@ export function useGameState(code: string): GameState {
         )
         .subscribe()
 
-      return () => {
-        supabase.removeChannel(channel)
-      }
+      channelRef.current = channel
     }
 
-    const cleanupPromise = init()
+    init()
     return () => {
       cancelled = true
-      cleanupPromise.then((cleanup) => cleanup?.())
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code])
+  }, [code, router])
 
   return {
     game,

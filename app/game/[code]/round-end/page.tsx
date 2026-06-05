@@ -26,18 +26,13 @@ export default function RoundEndPage() {
   }, [game?.status, code, router])
 
   // Build leaderboard entries from players
-  const leaderboardEntries: LeaderboardEntry[] = players
-    .map((p) => ({
-      playerId: p.id,
-      displayName: p.display_name,
-      avatarId: p.avatar_id,
-      totalScore: p.total_score,
-      totalTimeMs: p.total_time_ms,
-    }))
-    .sort((a, b) => {
-      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore
-      return a.totalTimeMs - b.totalTimeMs
-    })
+  const leaderboardEntries: LeaderboardEntry[] = players.map((p) => ({
+    playerId: p.id,
+    displayName: p.display_name,
+    avatarId: p.avatar_id,
+    totalScore: p.total_score,
+    totalTimeMs: p.total_time_ms,
+  }))
 
   // Map roundWinner Player → LeaderboardEntry for the banner
   const winnerEntry: LeaderboardEntry | null = roundWinner
@@ -84,6 +79,7 @@ export default function RoundEndPage() {
           winner={winnerEntry}
           allPlayers={leaderboardEntries}
           onContinue={handleContinue}
+          onDismiss={() => setShowBanner(false)}
           isOrganiser={isOrganiser}
         />
       )}

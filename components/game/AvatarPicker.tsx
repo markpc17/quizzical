@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 export interface AvatarPickerProps {
   selected: number | null
   onSelect: (id: number) => void
@@ -20,7 +22,7 @@ export function AvatarPicker({ selected, onSelect }: AvatarPickerProps) {
               : 'hover:bg-white/5'
           }`}
         >
-          <img
+          <Image
             src={`https://api.dicebear.com/9.x/fun-emoji/svg?seed=${id}`}
             alt={`Avatar ${id}`}
             width={64}
