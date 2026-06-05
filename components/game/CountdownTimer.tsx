@@ -3,17 +3,18 @@
 export interface CountdownTimerProps {
   total?: number
   remaining: number
+  frozen?: boolean
 }
 
-export function CountdownTimer({ total = 20, remaining }: CountdownTimerProps) {
+export function CountdownTimer({ total = 20, remaining, frozen = false }: CountdownTimerProps) {
   const size = 80
   const strokeWidth = 6
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const fraction = Math.max(0, Math.min(1, remaining / total))
   const dashOffset = circumference * (1 - fraction)
-  const isUrgent = remaining <= 5
-  const color = isUrgent ? '#ef4444' : '#6C3CF1'
+  const isUrgent = !frozen && remaining <= 5
+  const color = frozen ? '#6b7280' : isUrgent ? '#ef4444' : '#6C3CF1'
 
   return (
     <div className="relative inline-flex items-center justify-center">
@@ -39,7 +40,7 @@ export function CountdownTimer({ total = 20, remaining }: CountdownTimerProps) {
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
-          style={{ transition: 'stroke-dashoffset 0.5s linear, stroke 0.3s' }}
+          style={frozen ? undefined : { transition: 'stroke-dashoffset 0.5s linear, stroke 0.3s' }}
         />
       </svg>
       <span

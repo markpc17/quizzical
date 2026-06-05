@@ -35,6 +35,9 @@ export default function PlayPage() {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
   const [locked, setLocked] = useState(false)
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
+  const [answerTimeMs, setAnswerTimeMs] = useState<number | null>(null)
+  const [scoreDelta, setScoreDelta] = useState<number | null>(null)
+  const [prevScore, setPrevScore] = useState(0)
 
   // Stable derived value — avoids re-running the effect on every render when players array
   // gets a new reference but its contents haven't changed
@@ -75,6 +78,8 @@ export default function PlayPage() {
     setSelectedAnswer(null)
     setLocked(false)
     setFeedback(null)
+    setAnswerTimeMs(null)
+    setScoreDelta(null)
   }, [currentQuestion?.id])
 
   // Start countdown music when a new question opens
@@ -92,6 +97,18 @@ export default function PlayPage() {
     else if (feedback === 'wrong') playWrong()
   // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs
   }, [feedback])
+
+  // Track score increases to show +pts animation
+  const myScore = players.find((p) => p.id === myPlayerId)?.total_score ?? 0
+  useEffect(() => {
+    if (myScore > prevScore && prevScore > 0) {
+      setScoreDelta(myScore - prevScore)
+      const t = setTimeout(() => setScoreDelta(null), 1500)
+      return () => clearTimeout(t)
+    }
+    setPrevScore(myScore)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myScore])
 
   // Auto-navigate on game status changes
   useEffect(() => {
@@ -111,6 +128,10 @@ export default function PlayPage() {
       // Timed out with no answer — just lock the UI
       if (answer === null || !myPlayerId || !myPlayerToken || !currentQuestion) return
 
+      const timeTakenMs = currentQuestion.opened_at
+        ? Date.now() - new Date(currentQuestion.opened_at).getTime()
+        : null
+
       try {
         const res = await fetch(`/api/games/${code}/answer`, {
           method: 'POST',
@@ -125,6 +146,7 @@ export default function PlayPage() {
         if (res.ok) {
           const { isCorrect } = await res.json()
           setFeedback(isCorrect ? 'correct' : 'wrong')
+          if (isCorrect && timeTakenMs !== null) setAnswerTimeMs(timeTakenMs)
         }
       } catch {
         // Realtime drives next transition
@@ -162,8 +184,6 @@ export default function PlayPage() {
   }
 
   // Derive display values from live data
-  const myPlayer = players.find((p) => p.id === myPlayerId)
-  const myScore = myPlayer?.total_score ?? 0
   const roundNumber = currentRound?.round_number ?? game?.current_round ?? 1
   const questionNumber = (currentQuestion?.question_number ?? game?.current_question ?? 0) + 1
   const category = currentRound?.category_name ?? ''
@@ -180,7 +200,7 @@ export default function PlayPage() {
           <p className="text-white font-medium text-sm">{category}</p>
         </div>
 
-        <CountdownTimer total={questionDurationSec} remaining={remaining} />
+        <CountdownTimer total={questionDurationSec} remaining={remaining} frozen={locked} />
 
         <div className="flex items-center gap-3">
           <button
@@ -191,9 +211,23 @@ export default function PlayPage() {
           >
             {muted ? '🔇' : '🔊'}
           </button>
-          <div className="text-right">
+          <div className="text-right relative">
             <p className="text-white/50 text-xs uppercase tracking-widest">Score</p>
             <p className="font-fredoka text-brand-yellow text-xl">{myScore.toLocaleString()}</p>
+            <AnimatePresence>
+              {scoreDelta !== null && (
+                <motion.span
+                  key={scoreDelta}
+                  initial={{ opacity: 1, y: 0 }}
+                  animate={{ opacity: 0, y: -24 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 1.2 }}
+                  className="absolute -top-4 right-0 font-fredoka text-green-400 text-sm pointer-events-none"
+                >
+                  +{scoreDelta}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -233,20 +267,43 @@ export default function PlayPage() {
         </AnimatePresence>
 
         {/* Feedback banner */}
-        {feedback && (
-          <div
-            className={`rounded-xl px-6 py-3 font-fredoka text-xl ${
-              feedback === 'correct'
-                ? 'bg-green-600/30 text-green-300 border border-green-500'
-                : 'bg-red-600/20 text-red-300 border border-red-500/50'
-            }`}
-          >
-            {feedback === 'correct' ? '✓ Correct!' : '✗ Wrong answer'}
-          </div>
+        <AnimatePresence>
+          {feedback && (
+            <motion.div
+              key="feedback"
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className={`w-full max-w-2xl rounded-2xl px-8 py-5 font-fredoka text-center ${
+                feedback === 'correct'
+                  ? 'bg-green-600/30 text-green-300 border border-green-500'
+                  : 'bg-red-600/20 text-red-300 border border-red-500/50'
+              }`}
+            >
+              <p className="text-3xl sm:text-4xl">
+                {feedback === 'correct' ? '✓ Correct!' : '✗ Wrong answer'}
+              </p>
+              {feedback === 'wrong' && currentQuestion && (
+                <p className="mt-1 text-base text-white/60">
+                  Correct answer: <span className="text-white font-medium">{currentQuestion.correct_answer}</span>
+                </p>
+              )}
+              {feedback === 'correct' && answerTimeMs !== null && (
+                <p className="mt-1 text-base text-brand-yellow">
+                  ⚡ {(answerTimeMs / 1000).toFixed(1)}s — {answerTimeMs < 5000 ? 'Lightning fast!' : 'Good timing!'}
+                </p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {locked && !feedback && selectedAnswer === null && (
+          <p className="text-white/40 text-sm">Time&apos;s up — waiting for results…</p>
         )}
 
-        {locked && !feedback && (
-          <p className="text-white/40 text-sm">Time&apos;s up — waiting for results…</p>
+        {locked && !feedback && selectedAnswer !== null && (
+          <p className="text-white/40 text-sm">Answer locked in — waiting for result…</p>
         )}
 
         {locked && feedback && (
