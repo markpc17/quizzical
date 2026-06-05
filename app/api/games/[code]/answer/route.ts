@@ -148,64 +148,69 @@ export async function POST(
     }
   }
 
-  // Auto-advance if all players have now answered (best-effort — never fails the response)
-  try {
-    const [{ count: answerCount }, { count: playerCount }] = await Promise.all([
-      supabase
-        .from('answers')
-        .select('id', { count: 'exact', head: true })
-        .eq('question_id', questionId as string),
-      supabase
-        .from('players')
-        .select('id', { count: 'exact', head: true })
-        .eq('game_id', game.id),
-    ])
+  // Return result immediately — auto-advance runs in the background
+  const response = NextResponse.json({ ok: true, isCorrect })
 
-    if ((playerCount ?? 0) > 0 && (answerCount ?? 0) >= (playerCount ?? 1)) {
-      const now = new Date().toISOString()
-      const { current_round, current_question } = game
+  // Auto-advance if all players have now answered (fire-and-forget, best-effort)
+  void (async () => {
+    try {
+      const [{ count: answerCount }, { count: playerCount }] = await Promise.all([
+        supabase
+          .from('answers')
+          .select('id', { count: 'exact', head: true })
+          .eq('question_id', questionId as string),
+        supabase
+          .from('players')
+          .select('id', { count: 'exact', head: true })
+          .eq('game_id', game.id),
+      ])
 
-      if (current_question < QUESTIONS_PER_ROUND - 1) {
-        const { data: roundData } = await supabase
-          .from('rounds')
-          .select('id')
-          .eq('game_id', game.id)
-          .eq('round_number', current_round)
-          .single()
+      if ((playerCount ?? 0) > 0 && (answerCount ?? 0) >= (playerCount ?? 1)) {
+        const now = new Date().toISOString()
+        const { current_round, current_question } = game
 
-        if (roundData) {
-          const round = roundData as { id: string }
-          await supabase
-            .from('questions')
-            .update({ opened_at: now })
-            .eq('round_id', round.id)
-            .eq('question_number', current_question + 1)
+        if (current_question < QUESTIONS_PER_ROUND - 1) {
+          const { data: roundData } = await supabase
+            .from('rounds')
+            .select('id')
+            .eq('game_id', game.id)
+            .eq('round_number', current_round)
+            .single()
+
+          if (roundData) {
+            const round = roundData as { id: string }
+            await supabase
+              .from('questions')
+              .update({ opened_at: now })
+              .eq('round_id', round.id)
+              .eq('question_number', current_question + 1)
+            await supabase
+              .from('games')
+              .update({ current_question: current_question + 1 })
+              .eq('id', game.id)
+              .eq('current_question', current_question)
+              .eq('status', 'round_active')
+          }
+        } else if (current_round < game.total_rounds) {
           await supabase
             .from('games')
-            .update({ current_question: current_question + 1 })
+            .update({ status: 'round_end', current_question: 0 })
+            .eq('id', game.id)
+            .eq('current_question', current_question)
+            .eq('status', 'round_active')
+        } else {
+          await supabase
+            .from('games')
+            .update({ status: 'finished' })
             .eq('id', game.id)
             .eq('current_question', current_question)
             .eq('status', 'round_active')
         }
-      } else if (current_round < game.total_rounds) {
-        await supabase
-          .from('games')
-          .update({ status: 'round_end', current_question: 0 })
-          .eq('id', game.id)
-          .eq('current_question', current_question)
-          .eq('status', 'round_active')
-      } else {
-        await supabase
-          .from('games')
-          .update({ status: 'finished' })
-          .eq('id', game.id)
-          .eq('current_question', current_question)
-          .eq('status', 'round_active')
       }
+    } catch {
+      // Never fail the answer submission due to auto-advance errors
     }
-  } catch {
-    // Never fail the answer submission due to auto-advance errors
-  }
+  })()
 
-  return NextResponse.json({ ok: true, isCorrect })
+  return response
 }
