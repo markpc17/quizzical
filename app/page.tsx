@@ -57,6 +57,9 @@ export default function Home() {
           <p className="text-white/70 text-xl text-center">
             The ultimate quiz showdown
           </p>
+          <p className="text-white/40 text-base text-center font-fredoka">
+            5 rounds · 10 questions each · ~15 mins
+          </p>
 
           {error && (
             <p className="text-red-400 text-sm">{error}</p>
