@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClientUntyped } from '@/lib/supabase/admin'
-import { QUESTION_TIME_MS } from '@/lib/game-utils'
+import { QUESTION_TIME_MS, QUESTIONS_PER_ROUND } from '@/lib/game-utils'
 
 const MAX_TIME_MS = QUESTION_TIME_MS
 
@@ -39,14 +39,14 @@ export async function POST(
   // Look up the game by code to verify membership
   const { data: gameData, error: gameError } = await supabase
     .from('games')
-    .select('id, status')
+    .select('id, status, current_round, current_question, total_rounds')
     .eq('code', code.toUpperCase())
     .single()
 
   if (gameError || !gameData) {
     return NextResponse.json({ error: 'Game not found' }, { status: 404 })
   }
-  const game = gameData as { id: string; status: string }
+  const game = gameData as { id: string; status: string; current_round: number; current_question: number; total_rounds: number }
 
   if (game.status !== 'round_active') {
     return NextResponse.json({ error: 'Game is not accepting answers' }, { status: 409 })
@@ -146,6 +146,65 @@ export async function POST(
       // Log but don't fail — score update failure is non-critical for the answer record
       console.error('Score update failed:', scoreError)
     }
+  }
+
+  // Auto-advance if all players have now answered (best-effort — never fails the response)
+  try {
+    const [{ count: answerCount }, { count: playerCount }] = await Promise.all([
+      supabase
+        .from('answers')
+        .select('id', { count: 'exact', head: true })
+        .eq('question_id', questionId as string),
+      supabase
+        .from('players')
+        .select('id', { count: 'exact', head: true })
+        .eq('game_id', game.id),
+    ])
+
+    if ((playerCount ?? 0) > 0 && (answerCount ?? 0) >= (playerCount ?? 1)) {
+      const now = new Date().toISOString()
+      const { current_round, current_question } = game
+
+      if (current_question < QUESTIONS_PER_ROUND - 1) {
+        const { data: roundData } = await supabase
+          .from('rounds')
+          .select('id')
+          .eq('game_id', game.id)
+          .eq('round_number', current_round)
+          .single()
+
+        if (roundData) {
+          const round = roundData as { id: string }
+          await supabase
+            .from('questions')
+            .update({ opened_at: now })
+            .eq('round_id', round.id)
+            .eq('question_number', current_question + 1)
+          await supabase
+            .from('games')
+            .update({ current_question: current_question + 1 })
+            .eq('id', game.id)
+            .eq('current_question', current_question)
+            .eq('status', 'round_active')
+        }
+      } else if (current_round < game.total_rounds) {
+        await supabase
+          .from('games')
+          .update({ status: 'round_end', current_question: 0 })
+          .eq('id', game.id)
+          .eq('current_question', current_question)
+          .eq('status', 'round_active')
+      } else {
+        await supabase
+          .from('games')
+          .update({ status: 'finished' })
+          .eq('id', game.id)
+          .eq('current_question', current_question)
+          .eq('status', 'round_active')
+      }
+    }
+  } catch {
+    // Never fail the answer submission due to auto-advance errors
   }
 
   return NextResponse.json({ ok: true, isCorrect })
