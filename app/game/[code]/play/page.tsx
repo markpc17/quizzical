@@ -38,6 +38,7 @@ export default function PlayPage() {
   const [answerTimeMs, setAnswerTimeMs] = useState<number | null>(null)
   const [scoreDelta, setScoreDelta] = useState<number | null>(null)
   const [prevScore, setPrevScore] = useState(0)
+  const [streak, setStreak] = useState(0)
 
   // Stable derived value — avoids re-running the effect on every render when players array
   // gets a new reference but its contents haven't changed
@@ -81,6 +82,13 @@ export default function PlayPage() {
     setAnswerTimeMs(null)
     setScoreDelta(null)
   }, [currentQuestion?.id])
+
+  // Update streak on feedback
+  useEffect(() => {
+    if (feedback === 'correct') setStreak(s => s + 1)
+    else if (feedback === 'wrong') setStreak(0)
+    else if (feedback === null && locked && selectedAnswer === null) setStreak(0)
+  }, [feedback, locked, selectedAnswer])
 
   // Start countdown music when a new question opens
   useEffect(() => {
@@ -292,6 +300,11 @@ export default function PlayPage() {
               {feedback === 'correct' && answerTimeMs !== null && (
                 <p className="mt-1 text-base text-brand-yellow">
                   ⚡ {(answerTimeMs / 1000).toFixed(1)}s — {answerTimeMs < 5000 ? 'Lightning fast!' : 'Good timing!'}
+                </p>
+              )}
+              {feedback === 'correct' && streak >= 2 && (
+                <p className="mt-1 text-base text-orange-400">
+                  🔥 {streak} in a row!
                 </p>
               )}
             </motion.div>

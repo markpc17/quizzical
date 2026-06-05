@@ -13,7 +13,7 @@ export default function RoundEndPage() {
 
   const { game, players, currentRound, roundWinner, isOrganiser, loading } = useGameState(code)
 
-  const [showBanner, setShowBanner] = useState(true)
+  const [showBanner, setShowBanner] = useState(false)
   const [advancing, setAdvancing] = useState(false)
 
   // Auto-navigate when next round starts
@@ -89,13 +89,15 @@ export default function RoundEndPage() {
       </h2>
       <Leaderboard entries={leaderboardEntries} />
 
-      <button
-        type="button"
-        onClick={() => setShowBanner(true)}
-        className="mt-2 rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20 transition-colors"
-      >
-        Show Round Summary
-      </button>
+      {!showBanner && winnerEntry && (
+        <button
+          type="button"
+          onClick={() => setShowBanner(true)}
+          className="mt-2 rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20 transition-colors"
+        >
+          Show Round Winner
+        </button>
+      )}
     </main>
   )
 }
