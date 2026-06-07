@@ -16,6 +16,7 @@ export interface GameState {
   myPlayerToken: string | null
   isOrganiser: boolean
   roundWinner: Player | null
+  answeredCount: number
   loading: boolean
   error: string | null
 }
@@ -78,6 +79,7 @@ export function useGameState(code: string): GameState {
   const [myPlayerToken, setMyPlayerToken] = useState<string | null>(null)
   const [isOrganiser, setIsOrganiser] = useState(false)
   const [roundWinner, setRoundWinner] = useState<Player | null>(null)
+  const [answeredCount, setAnsweredCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -87,6 +89,8 @@ export function useGameState(code: string): GameState {
 
   // Mirror of players state — used for reads in realtime callbacks without setPlayers abuse
   const playersRef = useRef<Player[]>([])
+  // Mirror of currentQuestion — used in realtime answer callback to filter by current question
+  const currentQuestionRef = useRef<Question | null>(null)
 
   // Shuffle answers — stable per question ID
   const shuffledAnswers = useMemo(() => {
@@ -175,7 +179,11 @@ export function useGameState(code: string): GameState {
           .eq('round_id', round.id)
           .eq('question_number', gameRow.current_question)
           .single()
-        if (!cancelled) setCurrentQuestion((questionData as Question | null) ?? null)
+        const q = (questionData as Question | null) ?? null
+        if (!cancelled) {
+          currentQuestionRef.current = q
+          setCurrentQuestion(q)
+        }
       }
 
       // 5. If already in round_end, fetch round winner
@@ -227,7 +235,11 @@ export function useGameState(code: string): GameState {
                 .eq('round_id', round.id)
                 .eq('question_number', updated.current_question)
                 .single()
-              if (!cancelled) setCurrentQuestion((questionData as Question | null) ?? null)
+              const q = (questionData as Question | null) ?? null
+              if (!cancelled) {
+                currentQuestionRef.current = q
+                setCurrentQuestion(q)
+              }
             }
 
             // Fetch round winner on transition to round_end
@@ -289,7 +301,21 @@ export function useGameState(code: string): GameState {
             if (cancelled) return
             const q = payload.new as Question
             if (q.round_id !== round?.id) return   // ignore questions from other games
-            if (q.opened_at) setCurrentQuestion(q)
+            if (q.opened_at) {
+              currentQuestionRef.current = q
+              setCurrentQuestion(q)
+            }
+          }
+        )
+        // Answer submitted — increment counter for current question
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'answers' },
+          (payload) => {
+            if (cancelled) return
+            if (payload.new && payload.new.question_id === currentQuestionRef.current?.id) {
+              setAnsweredCount((n) => n + 1)
+            }
           }
         )
         .subscribe()
@@ -307,6 +333,11 @@ export function useGameState(code: string): GameState {
     }
   }, [code, router])
 
+  // Reset answer count each time a new question becomes active
+  useEffect(() => {
+    setAnsweredCount(0)
+  }, [currentQuestion?.id])
+
   return {
     game,
     players,
@@ -317,6 +348,7 @@ export function useGameState(code: string): GameState {
     myPlayerToken,
     isOrganiser,
     roundWinner,
+    answeredCount,
     loading,
     error,
   }
