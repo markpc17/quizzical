@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CountdownTimer } from '@/components/game/CountdownTimer'
@@ -24,6 +24,7 @@ export default function PlayPage() {
     currentRound,
     players,
     isOrganiser,
+    answeredCount,
     loading,
   } = useGameState(code)
 
@@ -37,17 +38,19 @@ export default function PlayPage() {
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
   const [answerTimeMs, setAnswerTimeMs] = useState<number | null>(null)
   const [scoreDelta, setScoreDelta] = useState<number | null>(null)
-  const [prevScore, setPrevScore] = useState(0)
+  const prevScoreRef = useRef(0)
   const [streak, setStreak] = useState(0)
 
   // Stable derived value — avoids re-running the effect on every render when players array
   // gets a new reference but its contents haven't changed
   const playerIds = players.map(p => p.id).join(',')
 
-  // Silent rejoin if player token is in localStorage but player not in game list
+  // Silent rejoin if player token is in localStorage but player not in game list.
+  // playerIds (comma-joined IDs) is used instead of the players array to avoid re-running
+  // the effect on every score update that creates a new array reference.
   useEffect(() => {
     if (loading || !game || game.status !== 'round_active') return
-    if (myPlayerId && players.some((p) => p.id === myPlayerId)) return
+    if (myPlayerId && playerIds.includes(myPlayerId)) return
 
     const stored = localStorage.getItem(`quizzicle-player-${code}`)
     if (!stored) return
@@ -71,7 +74,6 @@ export default function PlayPage() {
     } catch {
       // ignore corrupt localStorage
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- playerIds is a stable string derived from players
   }, [loading, game?.status, myPlayerId, playerIds, code])
 
   // Reset answer state when question changes
@@ -96,26 +98,24 @@ export default function PlayPage() {
       startCountdownMusic(currentQuestion.opened_at, QUESTION_TIME_MS)
     }
     return () => stopMusic()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs, re-run only on new question
-  }, [currentQuestion?.id])
+  }, [currentQuestion?.id, startCountdownMusic, stopMusic])
 
   // Play feedback sound when answer is judged
   useEffect(() => {
     if (feedback === 'correct') playCorrect()
     else if (feedback === 'wrong') playWrong()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs
-  }, [feedback])
+  }, [feedback, playCorrect, playWrong])
 
   // Track score increases to show +pts animation
   const myScore = players.find((p) => p.id === myPlayerId)?.total_score ?? 0
   useEffect(() => {
-    if (myScore > prevScore && prevScore > 0) {
-      setScoreDelta(myScore - prevScore)
+    if (myScore > prevScoreRef.current && prevScoreRef.current > 0) {
+      setScoreDelta(myScore - prevScoreRef.current)
       const t = setTimeout(() => setScoreDelta(null), 1500)
+      prevScoreRef.current = myScore
       return () => clearTimeout(t)
     }
-    setPrevScore(myScore)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    prevScoreRef.current = myScore
   }, [myScore])
 
   // Auto-navigate on game status changes
@@ -209,6 +209,12 @@ export default function PlayPage() {
         </div>
 
         <CountdownTimer total={questionDurationSec} remaining={remaining} frozen={locked} />
+
+        {!locked && players.length > 0 && (
+          <p className="text-center text-sm text-white/60 font-fredoka">
+            {answeredCount} of {players.length} answered
+          </p>
+        )}
 
         <div className="flex items-center gap-3">
           <button
