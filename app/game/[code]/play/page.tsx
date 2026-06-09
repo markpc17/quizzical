@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CountdownTimer } from '@/components/game/CountdownTimer'
@@ -28,7 +28,15 @@ export default function PlayPage() {
     loading,
   } = useGameState(code)
 
-  const remaining = useCountdown(currentQuestion?.opened_at ?? null, QUESTION_TIME_MS)
+  // closes_at (set server-side when one straggler remains) caps the timer
+  const effectiveTotalMs = useMemo(() => {
+    if (!currentQuestion?.opened_at || !currentQuestion.closes_at) return QUESTION_TIME_MS
+    const opened = new Date(currentQuestion.opened_at).getTime()
+    const closes = new Date(currentQuestion.closes_at).getTime()
+    return Math.max(0, Math.min(QUESTION_TIME_MS, closes - opened))
+  }, [currentQuestion?.opened_at, currentQuestion?.closes_at])
+
+  const remaining = useCountdown(currentQuestion?.opened_at ?? null, effectiveTotalMs)
 
   const { muted, toggleMute, startCountdownMusic, stopMusic, playCorrect, playWrong } =
     useGameSounds()
@@ -92,13 +100,14 @@ export default function PlayPage() {
     else if (feedback === null && locked && selectedAnswer === null) setStreak(0)
   }, [feedback, locked, selectedAnswer])
 
-  // Start countdown music when a new question opens
+  // Start countdown music when a new question opens — restarted with a shorter
+  // duration if the server closes the question early (closes_at appears)
   useEffect(() => {
     if (currentQuestion?.opened_at) {
-      startCountdownMusic(currentQuestion.opened_at, QUESTION_TIME_MS)
+      startCountdownMusic(currentQuestion.opened_at, effectiveTotalMs)
     }
     return () => stopMusic()
-  }, [currentQuestion?.id, startCountdownMusic, stopMusic])
+  }, [currentQuestion?.id, currentQuestion?.opened_at, effectiveTotalMs, startCountdownMusic, stopMusic])
 
   // Play feedback sound when answer is judged
   useEffect(() => {
@@ -167,7 +176,7 @@ export default function PlayPage() {
   useEffect(() => {
     if (!isOrganiser || !currentQuestion?.opened_at || game?.status !== 'round_active') return
     const openedAt = new Date(currentQuestion.opened_at).getTime()
-    const advanceAt = openedAt + QUESTION_TIME_MS + 3000
+    const advanceAt = openedAt + effectiveTotalMs + 3000
     const delay = Math.max(0, advanceAt - Date.now())
     const organiserToken = localStorage.getItem(`quizzicle-organiser-${code}`)
     const timer = setTimeout(() => {
@@ -178,7 +187,7 @@ export default function PlayPage() {
       }).catch(() => {})
     }, delay)
     return () => clearTimeout(timer)
-  }, [currentQuestion?.id, currentQuestion?.opened_at, isOrganiser, code, game?.status])
+  }, [currentQuestion?.id, currentQuestion?.opened_at, effectiveTotalMs, isOrganiser, code, game?.status])
 
   // Auto-submit on timer expiry
   useEffect(() => {
@@ -195,7 +204,7 @@ export default function PlayPage() {
   const roundNumber = currentRound?.round_number ?? game?.current_round ?? 1
   const questionNumber = (currentQuestion?.question_number ?? game?.current_question ?? 0) + 1
   const category = currentRound?.category_name ?? ''
-  const questionDurationSec = QUESTION_TIME_MS / 1000
+  const questionDurationSec = effectiveTotalMs / 1000
 
   return (
     <main className="min-h-screen bg-brand-dark flex flex-col">
