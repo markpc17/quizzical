@@ -81,16 +81,22 @@ export default function LobbyPage() {
     setError(null)
     try {
       const organiserToken = localStorage.getItem(`quizzicle-organiser-${code}`)
+      // Per-device OpenTDB token prevents question repeats across games
+      const opentdbToken = localStorage.getItem('quizzicle-opentdb-token')
       const res = await fetch(`/api/games/${code}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organiserToken, difficulty, rounds: roundCount }),
+        body: JSON.stringify({ organiserToken, difficulty, rounds: roundCount, opentdbToken }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         setError(data.error || 'Failed to start game')
         setStarting(false)
         return
+      }
+      const data = (await res.json().catch(() => null)) as { opentdbToken?: string | null } | null
+      if (data?.opentdbToken) {
+        localStorage.setItem('quizzicle-opentdb-token', data.opentdbToken)
       }
       // Realtime update will drive navigation via the useEffect above
     } catch {
