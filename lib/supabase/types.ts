@@ -39,6 +39,7 @@ export interface Question {
   correct_answer: string
   incorrect_answers: string[]
   opened_at: string | null
+  closes_at: string | null
 }
 
 export interface Answer {
@@ -85,6 +86,7 @@ export interface QuestionsInsert {
   correct_answer: string
   incorrect_answers: string[]
   opened_at?: string | null
+  closes_at?: string | null
 }
 
 export interface AnswersInsert {
