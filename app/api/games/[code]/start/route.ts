@@ -45,28 +45,55 @@ const NICHE_CATEGORIES: QuizCategory[] = [
   { id: 27, name: 'Animals & Wildlife' },
 ]
 
+async function requestOpenTDBToken(): Promise<string | undefined> {
+  try {
+    const res = await fetch('https://opentdb.com/api_token.php?command=request', { cache: 'no-store' })
+    if (!res.ok) return undefined
+    const json = (await res.json()) as { token?: string }
+    return json.token
+  } catch {
+    return undefined
+  }
+}
+
+interface CategoryFetchOutcome {
+  questions: OpenTDBQuestion[] | null
+  tokenExpired: boolean
+}
+
 async function fetchQuestionsForCategory(
   categoryId: number,
   difficulty: string,
   sessionToken?: string
-): Promise<OpenTDBQuestion[] | null> {
+): Promise<CategoryFetchOutcome> {
   const diffParam = difficulty !== 'mixed' ? `&difficulty=${difficulty}` : ''
   const tokenParam = sessionToken ? `&token=${sessionToken}` : ''
   const url = `https://opentdb.com/api.php?amount=${QUESTIONS_PER_ROUND}&category=${categoryId}&type=multiple${diffParam}${tokenParam}`
-  const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) return null
-  const json = (await res.json()) as OpenTDBQuestionsResponse
-  // response_code 5 = rate limited — wait and retry once
-  if (json.response_code === 5) {
-    await new Promise(resolve => setTimeout(resolve, 5000))
-    const retry = await fetch(url, { cache: 'no-store' })
-    if (!retry.ok) return null
-    const retryJson = (await retry.json()) as OpenTDBQuestionsResponse
-    if (retryJson.response_code !== 0 || retryJson.results.length < QUESTIONS_PER_ROUND) return null
-    return retryJson.results
+
+  const attempt = async (u: string): Promise<OpenTDBQuestionsResponse | null> => {
+    const res = await fetch(u, { cache: 'no-store' })
+    if (!res.ok) return null
+    return (await res.json()) as OpenTDBQuestionsResponse
   }
-  if (json.response_code !== 0 || json.results.length < QUESTIONS_PER_ROUND) return null
-  return json.results
+
+  let json = await attempt(url)
+  // response_code 5 = rate limited — wait and retry once
+  if (json?.response_code === 5) {
+    await new Promise((resolve) => setTimeout(resolve, 5000))
+    json = await attempt(url)
+  }
+  // response_code 3 = token not found/expired — caller refreshes and refetches
+  if (json?.response_code === 3) {
+    return { questions: null, tokenExpired: true }
+  }
+  // response_code 4 = pool exhausted for this token+category — a repeat beats a failed start
+  if (json?.response_code === 4 && tokenParam) {
+    json = await attempt(url.replace(tokenParam, ''))
+  }
+  if (!json || json.response_code !== 0 || json.results.length < QUESTIONS_PER_ROUND) {
+    return { questions: null, tokenExpired: false }
+  }
+  return { questions: json.results, tokenExpired: false }
 }
 
 export async function POST(
@@ -76,10 +103,11 @@ export async function POST(
   const { code } = await params
 
   const body = await request.json().catch(() => ({}))
-  const { organiserToken, difficulty: rawDifficulty, rounds: rawRounds } = body as {
+  const { organiserToken, difficulty: rawDifficulty, rounds: rawRounds, opentdbToken: rawToken } = body as {
     organiserToken?: unknown
     difficulty?: unknown
     rounds?: unknown
+    opentdbToken?: unknown
   }
   const difficulty =
     typeof rawDifficulty === 'string' && ['easy', 'medium', 'hard', 'mixed'].includes(rawDifficulty)
@@ -118,16 +146,11 @@ export async function POST(
     await supabase.from('rounds').delete().eq('game_id', game.id)
   }
 
-  // Request an OpenTDB session token to prevent duplicate questions across rounds
-  let sessionToken: string | undefined
-  try {
-    const tokenRes = await fetch('https://opentdb.com/api_token.php?command=request', { cache: 'no-store' })
-    if (tokenRes.ok) {
-      const tokenJson = (await tokenRes.json()) as { token?: string }
-      sessionToken = tokenJson.token
-    }
-  } catch {
-    // Proceed without session token — questions may occasionally repeat
+  // Reuse the organiser's OpenTDB session token so questions don't repeat
+  // across games; request a fresh one if none was provided.
+  let sessionToken = typeof rawToken === 'string' && rawToken ? rawToken : undefined
+  if (!sessionToken) {
+    sessionToken = await requestOpenTDBToken()
   }
 
   const mainstream = shuffleArray([...MAINSTREAM_CATEGORIES])
@@ -142,25 +165,30 @@ export async function POST(
   const padding = [...mainstream.slice(rounds - nicheCount), ...niche.slice(nicheCount)]
   const candidates = [...primary, ...padding].slice(0, rounds + 3)
 
-  const fetchResults = await Promise.allSettled(
-    candidates.map((category) =>
-      fetchQuestionsForCategory(category.id, difficulty, sessionToken)
-        .then((questions) => ({ category, questions }))
-        .catch(() => ({ category, questions: null }))
+  const fetchAll = (token?: string) =>
+    Promise.all(
+      candidates.map((category) =>
+        fetchQuestionsForCategory(category.id, difficulty, token)
+          .then((outcome) => ({ category, outcome }))
+          .catch(() => ({ category, outcome: { questions: null, tokenExpired: false } as CategoryFetchOutcome }))
+      )
     )
-  )
+
+  let fetchResults = await fetchAll(sessionToken)
+
+  // An expired token (6 idle hours) fails every category — refresh once and refetch
+  if (fetchResults.some((r) => r.outcome.tokenExpired)) {
+    sessionToken = await requestOpenTDBToken()
+    fetchResults = await fetchAll(sessionToken)
+  }
 
   const selectedRounds: Array<{ category: QuizCategory; questions: OpenTDBQuestion[] }> = []
   for (const result of fetchResults) {
     if (selectedRounds.length >= rounds) break
-    if (
-      result.status === 'fulfilled' &&
-      result.value.questions &&
-      result.value.questions.length >= QUESTIONS_PER_ROUND
-    ) {
+    if (result.outcome.questions && result.outcome.questions.length >= QUESTIONS_PER_ROUND) {
       selectedRounds.push({
-        category: result.value.category,
-        questions: result.value.questions.slice(0, QUESTIONS_PER_ROUND),
+        category: result.category,
+        questions: result.outcome.questions.slice(0, QUESTIONS_PER_ROUND),
       })
     }
   }
@@ -228,5 +256,5 @@ export async function POST(
     return NextResponse.json({ error: 'Failed to start game' }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, opentdbToken: sessionToken ?? null })
 }
