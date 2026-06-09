@@ -21,10 +21,11 @@ interface OpenTDBQuestionsResponse {
 }
 
 /**
- * Curated category pool mapped to OpenTDB category IDs.
- * 5 are chosen at random each game with no repeats.
+ * Category pool, split into tiers. Each game takes rounds − 1 mainstream
+ * categories plus one niche wildcard (two for 10-round games, since only
+ * 8 mainstream categories exist). Mapped to OpenTDB category IDs.
  */
-const QUIZ_CATEGORIES: QuizCategory[] = [
+const MAINSTREAM_CATEGORIES: QuizCategory[] = [
   { id: 22, name: 'Geography' },
   { id: 23, name: 'History' },
   { id: 17, name: 'Science & Nature' },
@@ -32,8 +33,11 @@ const QUIZ_CATEGORIES: QuizCategory[] = [
   { id: 12, name: 'Music' },
   { id: 11, name: 'Film & TV' },
   { id: 21, name: 'Sports' },
-  { id: 10, name: 'Literature' },
   { id: 18, name: 'Technology' },
+]
+
+const NICHE_CATEGORIES: QuizCategory[] = [
+  { id: 10, name: 'Literature' },
   { id: 25, name: 'Art & Architecture' },
   { id: 20, name: 'Mythology' },
   { id: 24, name: 'Politics & World Affairs' },
@@ -126,9 +130,17 @@ export async function POST(
     // Proceed without session token — questions may occasionally repeat
   }
 
-  const categoryPool = [...QUIZ_CATEGORIES]
-  shuffleArray(categoryPool)
-  const candidates = categoryPool.slice(0, rounds + 3) // extra candidates in case some fail
+  const mainstream = shuffleArray([...MAINSTREAM_CATEGORIES])
+  const niche = shuffleArray([...NICHE_CATEGORIES])
+  // 1 niche wildcard per game; 10-round games need 2 (only 8 mainstream exist)
+  const nicheCount = Math.max(1, rounds - mainstream.length)
+  const primary = shuffleArray([
+    ...mainstream.slice(0, rounds - nicheCount),
+    ...niche.slice(0, nicheCount),
+  ])
+  // Padding (mainstream first) absorbs per-category fetch failures
+  const padding = [...mainstream.slice(rounds - nicheCount), ...niche.slice(nicheCount)]
+  const candidates = [...primary, ...padding].slice(0, rounds + 3)
 
   const fetchResults = await Promise.allSettled(
     candidates.map((category) =>
