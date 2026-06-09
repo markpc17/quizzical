@@ -206,6 +206,22 @@ export async function POST(
             .eq('current_question', current_question)
             .eq('status', 'round_active')
         }
+      } else if (
+        (playerCount ?? 0) >= 2 &&
+        (answerCount ?? 0) === (playerCount ?? 0) - 1 &&
+        question.opened_at
+      ) {
+        // Exactly one player hasn't answered — close the question early.
+        // Only shrink when meaningful time remains, and never extend.
+        const remainingMs =
+          new Date(question.opened_at).getTime() + MAX_TIME_MS - Date.now()
+        if (remainingMs > 7000) {
+          await supabase
+            .from('questions')
+            .update({ closes_at: new Date(Date.now() + 5000).toISOString() })
+            .eq('id', questionId)
+            .is('closes_at', null)
+        }
       }
     } catch {
       // Never fail the answer submission due to auto-advance errors
