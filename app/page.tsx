@@ -73,6 +73,13 @@ export default function Home() {
           >
             {creating ? 'Creating…' : 'Create Game'}
           </button>
+
+          <a
+            href="/privacy"
+            className="text-white/30 text-xs hover:text-white/60 transition-colors"
+          >
+            Privacy Notice
+          </a>
         </main>
       )}
     </>

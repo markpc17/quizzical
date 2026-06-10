@@ -220,6 +220,12 @@ export default function LobbyPage() {
           >
             {joining ? 'Joining…' : 'Join Game'}
           </button>
+          <p className="text-white/30 text-xs text-center">
+            Your nickname is only used during the game and deleted automatically afterward.{' '}
+            <a href="/privacy" className="underline hover:text-white/60 transition-colors">
+              Privacy Notice
+            </a>
+          </p>
         </div>
       )}
 
