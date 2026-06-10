@@ -45,10 +45,22 @@ const NICHE_CATEGORIES: QuizCategory[] = [
   { id: 27, name: 'Animals & Wildlife' },
 ]
 
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response | null> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { cache: 'no-store', signal: controller.signal })
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function requestOpenTDBToken(): Promise<string | undefined> {
   try {
-    const res = await fetch('https://opentdb.com/api_token.php?command=request', { cache: 'no-store' })
-    if (!res.ok) return undefined
+    const res = await fetchWithTimeout('https://opentdb.com/api_token.php?command=request', 5000)
+    if (!res || !res.ok) return undefined
     const json = (await res.json()) as { token?: string }
     return json.token
   } catch {
@@ -72,8 +84,8 @@ async function fetchQuestionsForCategory(
 
   const attempt = async (u: string): Promise<OpenTDBQuestionsResponse | null> => {
     try {
-      const res = await fetch(u, { cache: 'no-store', signal: AbortSignal.timeout(5000) })
-      if (!res.ok) return null
+      const res = await fetchWithTimeout(u, 5000)
+      if (!res || !res.ok) return null
       return (await res.json()) as OpenTDBQuestionsResponse
     } catch {
       return null
@@ -83,7 +95,7 @@ async function fetchQuestionsForCategory(
   let json = await attempt(url)
   // response_code 5 = rate limited — wait and retry once
   if (json?.response_code === 5) {
-    await new Promise((resolve) => setTimeout(resolve, 3000))
+    await new Promise((resolve) => setTimeout(resolve, 1000))
     json = await attempt(url)
   }
   // response_code 3 = token not found/expired — caller refreshes and refetches

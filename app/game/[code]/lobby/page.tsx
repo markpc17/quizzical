@@ -98,7 +98,7 @@ export default function LobbyPage() {
       if (data?.opentdbToken) {
         localStorage.setItem('quizzicle-opentdb-token', data.opentdbToken)
       }
-      // Realtime update will drive navigation via the useEffect above
+      router.push(`/game/${code}/play`)
     } catch {
       setError('Failed to start game')
       setStarting(false)
