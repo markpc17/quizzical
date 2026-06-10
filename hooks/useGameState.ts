@@ -91,6 +91,10 @@ export function useGameState(code: string): GameState {
   const playersRef = useRef<Player[]>([])
   // Mirror of currentQuestion — used in realtime answer callback to filter by current question
   const currentQuestionRef = useRef<Question | null>(null)
+  // Mirrors of game/round — read by the polling fallback so applying an update
+  // never re-runs (and thereby cancels) the polling effect mid-cycle
+  const gameRef = useRef<Game | null>(null)
+  const currentRoundRef = useRef<Round | null>(null)
 
   // Shuffle answers — stable per question ID
   const shuffledAnswers = useMemo(() => {
@@ -146,7 +150,10 @@ export function useGameState(code: string): GameState {
         }
         return
       }
-      if (!cancelled) setGame(gameRow)
+      if (!cancelled) {
+        gameRef.current = gameRow
+        setGame(gameRow)
+      }
 
       // 2. Fetch players
       const { data: playerData } = await supabase
@@ -168,7 +175,10 @@ export function useGameState(code: string): GameState {
           .eq('round_number', gameRow.current_round)
           .single()
         round = (roundData as Round | null) ?? null
-        if (!cancelled) setCurrentRound(round)
+        if (!cancelled) {
+          currentRoundRef.current = round
+          setCurrentRound(round)
+        }
       }
 
       // 4. Fetch current question (current_question is 0-indexed)
@@ -210,6 +220,7 @@ export function useGameState(code: string): GameState {
           async (payload) => {
             if (cancelled) return
             const updated = payload.new as Game
+            gameRef.current = updated
             setGame(updated)
 
             // Fetch new round when round number advances
@@ -222,6 +233,7 @@ export function useGameState(code: string): GameState {
                 .single()
               const newRound = (roundData as Round | null) ?? null
               if (!cancelled && newRound) {
+                currentRoundRef.current = newRound
                 setCurrentRound(newRound)
                 round = newRound
               }
@@ -332,6 +344,122 @@ export function useGameState(code: string): GameState {
       }
     }
   }, [code, router])
+
+  // Polling fallback: realtime may not deliver events in all environments.
+  // Every 2s during an active game, reconcile local state with the server.
+  // All reads go through refs (gameRef/currentRoundRef/currentQuestionRef), never
+  // state, so applying an update cannot re-run this effect — re-running mid-cycle
+  // set `cancelled` and aborted the in-flight question fetch, leaving the UI stuck
+  // on the previous question. Reconciling against the *displayed* question (rather
+  // than diffing game-row snapshots) also makes a missed cycle heal on the next tick.
+  useEffect(() => {
+    if (loading) return
+    const supabase = supabaseRef.current
+    let cancelled = false
+
+    const poll = async () => {
+      const { data: gameData } = await supabase
+        .from('games')
+        .select('*')
+        .eq('code', code)
+        .single()
+      if (cancelled || !gameData) return
+      const updated = gameData as Game
+
+      const prev = gameRef.current
+      if (
+        updated.status !== prev?.status ||
+        updated.current_round !== prev?.current_round ||
+        updated.current_question !== prev?.current_question
+      ) {
+        gameRef.current = updated
+        setGame(updated)
+      }
+
+      // Reconcile round
+      let round = currentRoundRef.current
+      if (updated.current_round > 0 && round?.round_number !== updated.current_round) {
+        const { data: roundData } = await supabase
+          .from('rounds')
+          .select('*')
+          .eq('game_id', updated.id)
+          .eq('round_number', updated.current_round)
+          .single()
+        if (cancelled) return
+        const newRound = (roundData as Round | null) ?? null
+        if (newRound) {
+          round = newRound
+          currentRoundRef.current = newRound
+          setCurrentRound(newRound)
+        }
+      }
+
+      // Reconcile question
+      if (round && updated.status === 'round_active') {
+        const shown = currentQuestionRef.current
+        if (shown?.round_id !== round.id || shown?.question_number !== updated.current_question) {
+          const { data: questionData } = await supabase
+            .from('questions')
+            .select('*')
+            .eq('round_id', round.id)
+            .eq('question_number', updated.current_question)
+            .single()
+          if (cancelled) return
+          const q = (questionData as Question | null) ?? null
+          if (q) {
+            currentQuestionRef.current = q
+            setCurrentQuestion(q)
+          }
+        }
+      }
+
+      // Reconcile players — scores arrive via realtime UPDATE events, which may
+      // never be delivered, so re-fetch and apply only when something changed
+      const { data: playerData } = await supabase
+        .from('players')
+        .select('*')
+        .eq('game_id', updated.id)
+      if (cancelled) return
+      if (playerData) {
+        const rows = playerData as Player[]
+        const prevPlayers = playersRef.current
+        const playersChanged =
+          rows.length !== prevPlayers.length ||
+          rows.some((r) => {
+            const p = prevPlayers.find((x) => x.id === r.id)
+            return !p || p.total_score !== r.total_score
+          })
+        if (playersChanged) {
+          playersRef.current = rows
+          setPlayers(rows)
+        }
+      }
+
+      // Reconcile answered count for the displayed question (realtime INSERT on
+      // answers is equally unreliable). React bails out when the value is unchanged.
+      const shownQ = currentQuestionRef.current
+      if (shownQ && updated.status === 'round_active') {
+        const { count } = await supabase
+          .from('answers')
+          .select('id', { count: 'exact', head: true })
+          .eq('question_id', shownQ.id)
+        if (cancelled) return
+        if (typeof count === 'number') setAnsweredCount(count)
+      }
+
+      if (updated.status === 'round_end' && round && prev?.status !== 'round_end') {
+        fetchRoundWinner(supabase, round.id, playersRef.current).then((w) => {
+          if (!cancelled) setRoundWinner(w)
+        })
+      }
+    }
+
+    const interval = setInterval(poll, 2000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [code, loading])
 
   // Reset answer count each time a new question becomes active
   useEffect(() => {
