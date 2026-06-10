@@ -71,15 +71,19 @@ async function fetchQuestionsForCategory(
   const url = `https://opentdb.com/api.php?amount=${QUESTIONS_PER_ROUND}&category=${categoryId}&type=multiple${diffParam}${tokenParam}`
 
   const attempt = async (u: string): Promise<OpenTDBQuestionsResponse | null> => {
-    const res = await fetch(u, { cache: 'no-store' })
-    if (!res.ok) return null
-    return (await res.json()) as OpenTDBQuestionsResponse
+    try {
+      const res = await fetch(u, { cache: 'no-store', signal: AbortSignal.timeout(5000) })
+      if (!res.ok) return null
+      return (await res.json()) as OpenTDBQuestionsResponse
+    } catch {
+      return null
+    }
   }
 
   let json = await attempt(url)
   // response_code 5 = rate limited — wait and retry once
   if (json?.response_code === 5) {
-    await new Promise((resolve) => setTimeout(resolve, 5000))
+    await new Promise((resolve) => setTimeout(resolve, 3000))
     json = await attempt(url)
   }
   // response_code 3 = token not found/expired — caller refreshes and refetches
